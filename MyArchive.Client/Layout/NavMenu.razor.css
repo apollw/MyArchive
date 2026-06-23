@@ -1,0 +1,82 @@
+.brand-block {
+    padding: 2rem 1.5rem 1.25rem;
+}
+
+.brand-mark {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    text-decoration: none;
+    color: var(--surface-text);
+}
+
+.brand-mark strong {
+    font-size: 1.4rem;
+    letter-spacing: -0.03em;
+}
+
+.brand-eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(233, 238, 248, 0.64);
+}
+
+.brand-copy {
+    margin: 1rem 0 0;
+    color: rgba(233, 238, 248, 0.72);
+    line-height: 1.6;
+}
+
+.nav-grid {
+    display: grid;
+    gap: 0.85rem;
+    padding: 0 1.25rem 1.5rem;
+}
+
+.nav-grid ::deep .nav-card {
+    display: block;
+    padding: 1rem;
+    border-radius: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--surface-text);
+    text-decoration: none;
+    transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.nav-grid ::deep .nav-card strong,
+.nav-grid ::deep .nav-card small,
+.nav-grid ::deep .nav-card .nav-kicker {
+    display: block;
+}
+
+.nav-grid ::deep .nav-card strong {
+    font-size: 1rem;
+    margin: 0.25rem 0 0.45rem;
+}
+
+.nav-grid ::deep .nav-card small {
+    color: rgba(233, 238, 248, 0.7);
+    line-height: 1.45;
+}
+
+.nav-grid ::deep .nav-kicker {
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(244, 184, 96, 0.82);
+}
+
+.nav-grid ::deep .nav-card.active,
+.nav-grid ::deep .nav-card:hover {
+    background: rgba(244, 184, 96, 0.1);
+    border-color: rgba(244, 184, 96, 0.35);
+    transform: translateY(-1px);
+}
+
+@media (max-width: 960px) {
+    .brand-block {
+        padding-bottom: 0.5rem;
+    }
+}

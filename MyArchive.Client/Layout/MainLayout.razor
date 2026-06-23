@@ -1,0 +1,22 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <aside class="sidebar-shell">
+        <NavMenu />
+    </aside>
+
+    <main class="workspace">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Acervo pessoal para deploy</p>
+                <p class="topbar-copy">Frontend WebAssembly no cliente, API ASP.NET Core no backend e dados em PostgreSQL.</p>
+            </div>
+
+            <a class="button-link" href="/items/new">Novo item</a>
+        </header>
+
+        <article class="content-area">
+            @Body
+        </article>
+    </main>
+</div>

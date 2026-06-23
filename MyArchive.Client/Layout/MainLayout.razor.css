@@ -1,0 +1,62 @@
+.shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+}
+
+.sidebar-shell {
+    min-height: 100vh;
+    border-right: 1px solid var(--border-color);
+    background:
+        radial-gradient(circle at top left, rgba(244, 184, 96, 0.16), transparent 32rem),
+        linear-gradient(180deg, rgba(11, 16, 32, 0.98), rgba(14, 24, 42, 0.94));
+}
+
+.workspace {
+    min-width: 0;
+    padding: 2rem;
+}
+
+.topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+    margin: 0 0 0.4rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted-text);
+}
+
+.topbar-copy {
+    margin: 0;
+    color: var(--soft-text);
+    max-width: 44rem;
+}
+
+.content-area {
+    min-width: 0;
+}
+
+@media (max-width: 960px) {
+    .shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar-shell {
+        min-height: auto;
+    }
+
+    .workspace {
+        padding: 1rem;
+    }
+
+    .topbar {
+        flex-direction: column;
+    }
+}

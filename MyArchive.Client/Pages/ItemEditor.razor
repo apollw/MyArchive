@@ -1,0 +1,203 @@
+@page "/items/new"
+@page "/items/{ItemId:guid}"
+@inject ArchiveApiClient ArchiveClient
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isNew ? "Novo item" : "Editar item") | MyArchive</PageTitle>
+
+@if (_loading)
+{
+    <section class="panel-card">
+        <p class="empty-copy">Carregando editor...</p>
+    </section>
+}
+else if (_notFound)
+{
+    <section class="panel-card">
+        <p class="empty-copy">Item nao encontrado.</p>
+        <a class="button-link" href="/items">Voltar ao catalogo</a>
+    </section>
+}
+else
+{
+    <section class="page-header">
+        <div>
+            <p class="section-kicker">@(_isNew ? "Captura" : "Edicao")</p>
+            <h1>@(_isNew ? "Registrar um novo item." : $"Ajustar {Model.Title}.")</h1>
+            <p class="hero-copy">Use o mesmo modelo para livros, cursos, jogos, artigos e qualquer outro conteudo pessoal.</p>
+        </div>
+    </section>
+
+    <EditForm Model="Model" OnValidSubmit="SaveAsync" class="editor-stack">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <section class="panel-card form-grid">
+            <label class="full-span">
+                <span>Titulo</span>
+                <InputText class="input-field" @bind-Value="Model.Title" />
+            </label>
+
+            <label class="full-span">
+                <span>Descricao</span>
+                <InputTextArea class="input-field tall-field" @bind-Value="Model.Description" />
+            </label>
+
+            <label>
+                <span>Tipo</span>
+                <InputText class="input-field" @bind-Value="Model.Type" list="type-suggestions" />
+                <datalist id="type-suggestions">
+                    @foreach (var suggestion in ArchiveMetadata.SuggestedTypes)
+                    {
+                        <option value="@suggestion"></option>
+                    }
+                </datalist>
+            </label>
+
+            <label>
+                <span>Status</span>
+                <InputSelect class="input-field" @bind-Value="Model.Status">
+                    @foreach (var status in Enum.GetValues<ItemStatus>())
+                    {
+                        <option value="@status">@status.GetLabel()</option>
+                    }
+                </InputSelect>
+            </label>
+
+            <label>
+                <span>Prioridade</span>
+                <InputSelect class="input-field" @bind-Value="Model.Priority">
+                    @foreach (var priority in Enum.GetValues<ItemPriority>())
+                    {
+                        <option value="@priority">@priority.GetLabel()</option>
+                    }
+                </InputSelect>
+            </label>
+
+            <label>
+                <span>Progresso (%)</span>
+                <InputNumber class="input-field" @bind-Value="Model.ProgressPercent" />
+            </label>
+
+            <label class="full-span">
+                <span>Progresso textual</span>
+                <InputText class="input-field" @bind-Value="Model.ProgressLabel" placeholder="Ex.: Capitulo 4 de 12" />
+            </label>
+
+            <label class="full-span">
+                <span>Tags</span>
+                <InputText class="input-field" @bind-Value="Model.TagsText" placeholder="Separar por virgula, ponto e virgula ou quebra de linha" />
+            </label>
+
+            <label>
+                <span>Criado em</span>
+                <InputDate class="input-field" @bind-Value="Model.CreatedAt" />
+            </label>
+
+            <label>
+                <span>Concluido em</span>
+                <InputDate class="input-field" @bind-Value="Model.CompletedAt" />
+            </label>
+
+            <label class="full-span">
+                <span>Notas</span>
+                <InputTextArea class="input-field tall-field" @bind-Value="Model.Notes" />
+            </label>
+        </section>
+
+        <section class="panel-card">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Checklist</p>
+                    <h2>Subtarefas do item</h2>
+                </div>
+                <button type="button" class="button-link muted" @onclick="AddChecklistEntry">Adicionar subtarefa</button>
+            </div>
+
+            @if (Model.ChecklistEntries.Count == 0)
+            {
+                <p class="empty-copy">Nenhuma subtarefa cadastrada.</p>
+            }
+            else
+            {
+                <div class="editor-stack">
+                    @for (var index = 0; index < Model.ChecklistEntries.Count; index++)
+                    {
+                        var entry = Model.ChecklistEntries[index];
+
+                        <div class="checklist-editor-row">
+                            <InputCheckbox class="form-check-input" @bind-Value="entry.IsCompleted" />
+                            <InputText class="input-field" @bind-Value="entry.Title" placeholder="Descreva a subtarefa" />
+                            <button type="button" class="inline-button" @onclick="() => RemoveChecklistEntry(index)">Remover</button>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+
+        <div class="toolbar-actions">
+            <button type="submit" class="button-link">Salvar item</button>
+            <a class="button-link muted" href="/items">Cancelar</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public Guid? ItemId { get; set; }
+
+    private ItemEditorModel Model { get; set; } = new();
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _isNew => !ItemId.HasValue;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _notFound = false;
+
+        if (_isNew)
+        {
+            Model = ArchiveApiClient.CreateNewItem();
+        }
+        else if (ItemId is Guid itemId)
+        {
+            var existing = await ArchiveClient.GetItemAsync(itemId);
+            if (existing is null)
+            {
+                _notFound = true;
+            }
+            else
+            {
+                Model = existing;
+            }
+        }
+        else
+        {
+            _notFound = true;
+        }
+
+        _loading = false;
+    }
+
+    private void AddChecklistEntry()
+    {
+        Model.ChecklistEntries.Add(new ChecklistEntryModel());
+    }
+
+    private void RemoveChecklistEntry(int index)
+    {
+        if (index < 0 || index >= Model.ChecklistEntries.Count)
+        {
+            return;
+        }
+
+        Model.ChecklistEntries.RemoveAt(index);
+    }
+
+    private async Task SaveAsync()
+    {
+        var saved = await ArchiveClient.SaveItemAsync(Model);
+        Navigation.NavigateTo($"/items/{saved.Id}");
+    }
+}

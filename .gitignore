@@ -1,0 +1,67 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+publish/
+
+# .NET tooling
+*.rsuser
+*.user
+*.userosscache
+*.suo
+*.cache
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.snupkg
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+artifacts.nuget.props
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.sln.iml
+
+# Blazor / static web assets intermediate files
+*.staticwebassets.endpoints.json
+*.staticwebassets.runtime.json
+service-worker-assets.js
+
+# Test and coverage outputs
+TestResults/
+coverage/
+coverage-report/
+*.coverage
+*.coveragexml
+*.trx
+
+# Local environment overrides
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+MyArchive.Client/wwwroot/appsettings.Local.json
+MyArchive.Client/wwwroot/appsettings.*.Local.json
+
+# User secrets and local certificates
+secrets.json
+*.pfx
+*.pem
+*.key
+
+# Firebase local state
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini

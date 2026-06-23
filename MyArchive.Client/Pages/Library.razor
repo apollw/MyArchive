@@ -1,0 +1,133 @@
+@page "/library"
+@inject ArchiveApiClient ArchiveClient
+
+<PageTitle>Importar e exportar | MyArchive</PageTitle>
+
+<section class="page-header">
+    <div>
+        <p class="section-kicker">Portabilidade</p>
+        <h1>Seus dados continuam livres.</h1>
+        <p class="hero-copy">Exporte para formatos abertos e reimporte quando quiser, sem dependencia de servicos externos.</p>
+    </div>
+</section>
+
+<section class="dashboard-grid">
+    <article class="panel-card">
+        <div class="panel-heading">
+            <div>
+                <p class="section-kicker">Exportacao</p>
+                <h2>Baixar acervo</h2>
+            </div>
+        </div>
+
+        <div class="stack-list">
+            <a class="button-link" href="@ArchiveClient.ExportJsonUrl" target="_blank" rel="noreferrer">Exportar JSON</a>
+            <a class="button-link muted" href="@ArchiveClient.ExportCsvUrl" target="_blank" rel="noreferrer">Exportar CSV</a>
+            <a class="button-link muted" href="@ArchiveClient.ExportMarkdownUrl" target="_blank" rel="noreferrer">Exportar Markdown</a>
+        </div>
+    </article>
+
+    <article class="panel-card">
+        <div class="panel-heading">
+            <div>
+                <p class="section-kicker">Importacao</p>
+                <h2>Trazer dados de volta</h2>
+            </div>
+        </div>
+
+        <div class="editor-stack">
+            <label>
+                <span>Formato</span>
+                <InputSelect class="input-field" @bind-Value="_format">
+                    <option value="@ImportFormat.Json">JSON</option>
+                    <option value="@ImportFormat.Csv">CSV</option>
+                </InputSelect>
+            </label>
+
+            <label>
+                <span>Arquivo</span>
+                <InputFile OnChange="HandleFileChange" />
+            </label>
+
+            @if (_selectedFile is not null)
+            {
+                <p class="helper-copy">Arquivo selecionado: @_selectedFile.Name (@_selectedFile.Size bytes)</p>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="error-copy">@_error</p>
+            }
+
+            @if (_result is not null)
+            {
+                <div class="success-box">
+                    <strong>@_result.Message</strong>
+                    <p>@_result.TotalProcessed item(ns) processados. @_result.Created criados, @_result.Updated atualizados.</p>
+                </div>
+            }
+
+            <button type="button" class="button-link" @onclick="ImportAsync">Importar arquivo</button>
+        </div>
+    </article>
+
+    <article class="panel-card wide">
+        <div class="panel-heading">
+            <div>
+                <p class="section-kicker">Stack</p>
+                <h2>Arquitetura de deploy</h2>
+            </div>
+        </div>
+
+        <div class="type-grid">
+            <article class="type-card">
+                <span>Frontend</span>
+                <strong>Blazor WebAssembly</strong>
+            </article>
+            <article class="type-card">
+                <span>Backend</span>
+                <strong>ASP.NET Core API</strong>
+            </article>
+            <article class="type-card">
+                <span>Banco</span>
+                <strong>PostgreSQL</strong>
+            </article>
+        </div>
+    </article>
+</section>
+
+@code {
+    private ImportFormat _format = ImportFormat.Json;
+    private IBrowserFile? _selectedFile;
+    private ImportSummary? _result;
+    private string? _error;
+
+    private void HandleFileChange(InputFileChangeEventArgs args)
+    {
+        _selectedFile = args.File;
+        _result = null;
+        _error = null;
+    }
+
+    private async Task ImportAsync()
+    {
+        if (_selectedFile is null)
+        {
+            _error = "Selecione um arquivo antes de importar.";
+            _result = null;
+            return;
+        }
+
+        try
+        {
+            await using var stream = _selectedFile.OpenReadStream(5_000_000);
+            _result = await ArchiveClient.ImportAsync(stream, _selectedFile.Name, _format);
+            _error = null;
+        }
+        catch (Exception exception)
+        {
+            _result = null;
+            _error = exception.Message;
+        }
+    }
+}

@@ -1,0 +1,198 @@
+@page "/"
+@inject ArchiveApiClient ArchiveClient
+
+<PageTitle>Dashboard | MyArchive</PageTitle>
+
+@if (_dashboard is null)
+{
+    <section class="hero-panel">
+        <p class="section-kicker">Carregando</p>
+        <h1>Montando o panorama do seu acervo.</h1>
+    </section>
+}
+else
+{
+    <section class="hero-panel">
+        <div>
+            <p class="section-kicker">Dashboard</p>
+            <h1>Uma visao rapida do que merece atencao agora.</h1>
+            <p class="hero-copy">
+                MyArchive centraliza leitura, estudos, entretenimento e projetos em um fluxo simples:
+                capturar, acompanhar, concluir e manter historico portavel.
+            </p>
+        </div>
+
+        <div class="hero-actions">
+            <a class="button-link" href="/items/new">Cadastrar item</a>
+            <a class="button-link muted" href="/library">Exportar dados</a>
+        </div>
+    </section>
+
+    <section class="metric-grid">
+        @foreach (var metric in _dashboard.Metrics)
+        {
+            <article class="metric-card @metric.Accent">
+                <span>@metric.Label</span>
+                <strong>@metric.Value</strong>
+            </article>
+        }
+    </section>
+
+    <section class="dashboard-grid">
+        <article class="panel-card">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Fila ativa</p>
+                    <h2>Itens em andamento</h2>
+                </div>
+                <a class="inline-link" href="/items">Ver catalogo</a>
+            </div>
+
+            @if (_dashboard.InProgress.Count == 0)
+            {
+                <p class="empty-copy">Nenhum item em andamento no momento.</p>
+            }
+            else
+            {
+                <div class="stack-list">
+                    @foreach (var item in _dashboard.InProgress)
+                    {
+                        <article class="item-row">
+                            <div>
+                                <div class="item-header">
+                                    <strong>@item.Title</strong>
+                                    <span class="pill @item.Priority.GetCssClass()">@item.Priority.GetLabel()</span>
+                                </div>
+                                <p>@item.Type · @item.Status.GetLabel()</p>
+                                <small>@FormatProgress(item)</small>
+                            </div>
+                            <a class="inline-link" href="/items/@item.Id">Editar</a>
+                        </article>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="panel-card">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Historico</p>
+                    <h2>Concluidos recentemente</h2>
+                </div>
+            </div>
+
+            @if (_dashboard.RecentlyCompleted.Count == 0)
+            {
+                <p class="empty-copy">Ainda nao existem conclusoes registradas.</p>
+            }
+            else
+            {
+                <div class="stack-list">
+                    @foreach (var item in _dashboard.RecentlyCompleted)
+                    {
+                        <article class="item-row compact">
+                            <div>
+                                <strong>@item.Title</strong>
+                                <p>@item.Type · @(item.CompletedAt?.ToString("dd/MM/yyyy") ?? "-")</p>
+                            </div>
+                            <span class="pill status-completed">100%</span>
+                        </article>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="panel-card">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Prioridades</p>
+                    <h2>Proximos itens de foco</h2>
+                </div>
+            </div>
+
+            @if (_dashboard.PriorityFocus.Count == 0)
+            {
+                <p class="empty-copy">Seu backlog esta zerado.</p>
+            }
+            else
+            {
+                <div class="stack-list">
+                    @foreach (var item in _dashboard.PriorityFocus)
+                    {
+                        <article class="item-row">
+                            <div>
+                                <div class="item-header">
+                                    <strong>@item.Title</strong>
+                                    <span class="pill @item.Status.GetCssClass()">@item.Status.GetLabel()</span>
+                                </div>
+                                <p>@item.Type</p>
+                            </div>
+                            <span class="pill @item.Priority.GetCssClass()">@item.Priority.GetLabel()</span>
+                        </article>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="panel-card">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Estatisticas</p>
+                    <h2>Panorama por status</h2>
+                </div>
+            </div>
+
+            <div class="chart-list">
+                @foreach (var point in _dashboard.StatusBreakdown)
+                {
+                    <div class="chart-row">
+                        <span>@point.Label</span>
+                        <div class="chart-track">
+                            <div class="chart-bar" style="@($"width: {GetRatio(point.Value, _dashboard.StatusBreakdown)}%;")"></div>
+                        </div>
+                        <strong>@point.Value</strong>
+                    </div>
+                }
+            </div>
+        </article>
+
+        <article class="panel-card wide">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Categorias</p>
+                    <h2>Tipos mais presentes</h2>
+                </div>
+            </div>
+
+            <div class="type-grid">
+                @foreach (var point in _dashboard.TypeBreakdown)
+                {
+                    <article class="type-card">
+                        <span>@point.Label</span>
+                        <strong>@point.Value</strong>
+                    </article>
+                }
+            </div>
+        </article>
+    </section>
+}
+
+@code {
+    private DashboardSummary? _dashboard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dashboard = await ArchiveClient.GetDashboardAsync();
+    }
+
+    private static string FormatProgress(ArchiveListItemSummary item)
+        => string.IsNullOrWhiteSpace(item.ProgressLabel)
+            ? $"{item.ProgressPercent:0}%"
+            : $"{item.ProgressPercent:0}% · {item.ProgressLabel}";
+
+    private static double GetRatio(int value, IReadOnlyList<DashboardTimelinePoint> points)
+    {
+        var max = Math.Max(1, points.Max(point => point.Value));
+        return value * 100d / max;
+    }
+}
