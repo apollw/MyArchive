@@ -3,7 +3,7 @@
 @inject ArchiveApiClient ArchiveClient
 @inject NavigationManager Navigation
 
-<PageTitle>@(_isNew ? "Novo item" : "Editar item") | MyArchive</PageTitle>
+<PageTitle>@(_isNew ? "Nova obra" : "Editar obra") | MyArchive</PageTitle>
 
 @if (_loading)
 {
@@ -15,16 +15,16 @@ else if (_notFound)
 {
     <section class="panel-card">
         <p class="empty-copy">Item nao encontrado.</p>
-        <a class="button-link" href="/items">Voltar ao catalogo</a>
+        <a class="button-link" href="/items">Voltar ao acervo</a>
     </section>
 }
 else
 {
     <section class="page-header">
         <div>
-            <p class="section-kicker">@(_isNew ? "Captura" : "Edicao")</p>
-            <h1>@(_isNew ? "Registrar um novo item." : $"Ajustar {Model.Title}.")</h1>
-            <p class="hero-copy">Use o mesmo modelo para livros, cursos, jogos, artigos e qualquer outro conteudo pessoal.</p>
+            <p class="section-kicker">@(_isNew ? "Cadastro" : "Edicao")</p>
+            <h1>@(_isNew ? "Registrar uma nova obra." : $"Ajustar {Model.Title}.")</h1>
+            <p class="hero-copy">Cada categoria usa status proprios e o cadastro prioriza capa, avaliacao, resenha e observacoes.</p>
         </div>
     </section>
 
@@ -33,60 +33,43 @@ else
         <ValidationSummary />
 
         <section class="panel-card form-grid">
+            <label>
+                <span>Categoria</span>
+                <select class="input-field" value="@Model.Category" @onchange="HandleCategoryChanged">
+                    @foreach (var category in ArchiveMetadata.Categories)
+                    {
+                        <option value="@category">@category</option>
+                    }
+                </select>
+            </label>
+
+            <label>
+                <span>Status</span>
+                <InputSelect class="input-field" @bind-Value="Model.Status">
+                    @foreach (var status in ArchiveMetadata.GetStatuses(Model.Category))
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </InputSelect>
+            </label>
+
             <label class="full-span">
                 <span>Titulo</span>
                 <InputText class="input-field" @bind-Value="Model.Title" />
             </label>
 
             <label class="full-span">
-                <span>Descricao</span>
-                <InputTextArea class="input-field tall-field" @bind-Value="Model.Description" />
+                <span>URL da capa</span>
+                <InputText class="input-field" @bind-Value="Model.CoverImageUrl" placeholder="https://..." />
             </label>
+
+            <div class="cover-preview-shell full-span">
+                <img class="cover-preview" src="@Model.CoverImageUrl" alt="Previa da capa de @Model.Title" />
+            </div>
 
             <label>
-                <span>Tipo</span>
-                <InputText class="input-field" @bind-Value="Model.Type" list="type-suggestions" />
-                <datalist id="type-suggestions">
-                    @foreach (var suggestion in ArchiveMetadata.SuggestedTypes)
-                    {
-                        <option value="@suggestion"></option>
-                    }
-                </datalist>
-            </label>
-
-            <label>
-                <span>Status</span>
-                <InputSelect class="input-field" @bind-Value="Model.Status">
-                    @foreach (var status in Enum.GetValues<ItemStatus>())
-                    {
-                        <option value="@status">@status.GetLabel()</option>
-                    }
-                </InputSelect>
-            </label>
-
-            <label>
-                <span>Prioridade</span>
-                <InputSelect class="input-field" @bind-Value="Model.Priority">
-                    @foreach (var priority in Enum.GetValues<ItemPriority>())
-                    {
-                        <option value="@priority">@priority.GetLabel()</option>
-                    }
-                </InputSelect>
-            </label>
-
-            <label>
-                <span>Progresso (%)</span>
-                <InputNumber class="input-field" @bind-Value="Model.ProgressPercent" />
-            </label>
-
-            <label class="full-span">
-                <span>Progresso textual</span>
-                <InputText class="input-field" @bind-Value="Model.ProgressLabel" placeholder="Ex.: Capitulo 4 de 12" />
-            </label>
-
-            <label class="full-span">
-                <span>Tags</span>
-                <InputText class="input-field" @bind-Value="Model.TagsText" placeholder="Separar por virgula, ponto e virgula ou quebra de linha" />
+                <span>Nota</span>
+                <InputNumber TValue="double?" class="input-field" @bind-Value="Model.Rating" />
             </label>
 
             <label>
@@ -100,43 +83,60 @@ else
             </label>
 
             <label class="full-span">
-                <span>Notas</span>
+                <span>Resenha</span>
+                <InputTextArea class="input-field tall-field" @bind-Value="Model.Review" />
+            </label>
+
+            <label class="full-span">
+                <span>Observacoes</span>
                 <InputTextArea class="input-field tall-field" @bind-Value="Model.Notes" />
+            </label>
+
+            <label class="full-span">
+                <span>Tags auxiliares</span>
+                <InputText class="input-field" @bind-Value="Model.TagsText" placeholder="Opcional" />
             </label>
         </section>
 
-        <section class="panel-card">
-            <div class="panel-heading">
-                <div>
-                    <p class="section-kicker">Checklist</p>
-                    <h2>Subtarefas do item</h2>
+        @if (ArchiveMetadata.IsGameCategory(Model.Category))
+        {
+            <section class="panel-card form-grid">
+                <div class="full-span">
+                    <p class="section-kicker">Games</p>
+                    <h2>Detalhes da versao</h2>
                 </div>
-                <button type="button" class="button-link muted" @onclick="AddChecklistEntry">Adicionar subtarefa</button>
-            </div>
 
-            @if (Model.ChecklistEntries.Count == 0)
-            {
-                <p class="empty-copy">Nenhuma subtarefa cadastrada.</p>
-            }
-            else
-            {
-                <div class="editor-stack">
-                    @for (var index = 0; index < Model.ChecklistEntries.Count; index++)
-                    {
-                        var entry = Model.ChecklistEntries[index];
+                <label>
+                    <span>Midia</span>
+                    <InputSelect class="input-field" @bind-Value="Model.GameMedia">
+                        <option value="">Selecione</option>
+                        @foreach (var media in ArchiveMetadata.GameMediaOptions)
+                        {
+                            <option value="@media">@media</option>
+                        }
+                    </InputSelect>
+                </label>
 
-                        <div class="checklist-editor-row">
-                            <InputCheckbox class="form-check-input" @bind-Value="entry.IsCompleted" />
-                            <InputText class="input-field" @bind-Value="entry.Title" placeholder="Descreva a subtarefa" />
-                            <button type="button" class="inline-button" @onclick="() => RemoveChecklistEntry(index)">Remover</button>
-                        </div>
-                    }
-                </div>
-            }
-        </section>
+                <label>
+                    <span>Plataforma</span>
+                    <InputSelect class="input-field" @bind-Value="Model.GamePlatform">
+                        <option value="">Selecione</option>
+                        @foreach (var platform in ArchiveMetadata.GamePlatformOptions)
+                        {
+                            <option value="@platform">@platform</option>
+                        }
+                    </InputSelect>
+                </label>
+
+                <label class="toggle-field full-span">
+                    <InputCheckbox class="form-check-input" @bind-Value="Model.FinishedOnAnotherPlatform" />
+                    <span>Finalizado em outra plataforma</span>
+                </label>
+            </section>
+        }
 
         <div class="toolbar-actions">
-            <button type="submit" class="button-link">Salvar item</button>
+            <button type="submit" class="button-link">Salvar obra</button>
             <a class="button-link muted" href="/items">Cancelar</a>
         </div>
     </EditForm>
@@ -170,6 +170,7 @@ else
             else
             {
                 Model = existing;
+                EnsureValidStatus();
             }
         }
         else
@@ -180,23 +181,28 @@ else
         _loading = false;
     }
 
-    private void AddChecklistEntry()
+    private void HandleCategoryChanged(ChangeEventArgs args)
     {
-        Model.ChecklistEntries.Add(new ChecklistEntryModel());
+        Model.Category = args.Value?.ToString() ?? ArchiveMetadata.Categories.First();
+        EnsureValidStatus();
+
+        if (!ArchiveMetadata.IsGameCategory(Model.Category))
+        {
+            Model.GameMedia = string.Empty;
+            Model.GamePlatform = string.Empty;
+            Model.FinishedOnAnotherPlatform = false;
+        }
     }
 
-    private void RemoveChecklistEntry(int index)
+    private void EnsureValidStatus()
     {
-        if (index < 0 || index >= Model.ChecklistEntries.Count)
-        {
-            return;
-        }
-
-        Model.ChecklistEntries.RemoveAt(index);
+        Model.Category = ArchiveMetadata.NormalizeCategory(Model.Category);
+        Model.Status = ArchiveMetadata.NormalizeStatus(Model.Category, Model.Status);
     }
 
     private async Task SaveAsync()
     {
+        EnsureValidStatus();
         var saved = await ArchiveClient.SaveItemAsync(Model);
         Navigation.NavigateTo($"/items/{saved.Id}");
     }

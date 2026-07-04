@@ -21,53 +21,51 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var items = await db.Items
             .AsNoTracking()
             .Include(item => item.Tags)
-            .Include(item => item.ChecklistEntries)
-            .OrderByDescending(item => item.Priority)
-            .ThenBy(item => item.Title)
+            .OrderByDescending(item => item.CreatedAt)
             .ToListAsync();
 
         var summaries = items.Select(MapSummary).ToList();
+        var averageRating = summaries.Where(item => item.Rating.HasValue).Select(item => item.Rating!.Value).ToList();
 
         var metrics = new List<DashboardMetric>
         {
-            new("Total de itens", summaries.Count.ToString(CultureInfo.InvariantCulture), "accent-slate"),
-            new("Em andamento", summaries.Count(item => item.Status == ItemStatus.InProgress).ToString(CultureInfo.InvariantCulture), "accent-gold"),
-            new("Concluidos", summaries.Count(item => item.Status == ItemStatus.Completed).ToString(CultureInfo.InvariantCulture), "accent-green"),
-            new("Prioridade critica", summaries.Count(item => item.Priority == ItemPriority.Critical).ToString(CultureInfo.InvariantCulture), "accent-red")
+            new("Total no acervo", summaries.Count.ToString(CultureInfo.InvariantCulture), "accent-slate"),
+            new("Em andamento", summaries.Count(item => ArchiveMetadata.IsInProgress(item.Category, item.Status)).ToString(CultureInfo.InvariantCulture), "accent-gold"),
+            new("Concluidos", summaries.Count(item => ArchiveMetadata.IsCompleted(item.Category, item.Status)).ToString(CultureInfo.InvariantCulture), "accent-green"),
+            new("Nao iniciados", summaries.Count(item => ArchiveMetadata.IsNotStarted(item.Category, item.Status)).ToString(CultureInfo.InvariantCulture), "accent-red"),
+            new("Media de notas", averageRating.Count == 0 ? "-" : averageRating.Average().ToString("0.0", CultureInfo.InvariantCulture), "accent-blue")
         };
 
-        var statusBreakdown = Enum.GetValues<ItemStatus>()
-            .Select(status => new DashboardTimelinePoint(status.GetLabel(), summaries.Count(item => item.Status == status)))
+        var categoryBreakdown = ArchiveMetadata.Categories
+            .Select(category => new DashboardTimelinePoint(category, summaries.Count(item => item.Category.Equals(category, StringComparison.OrdinalIgnoreCase))))
             .ToList();
 
-        var typeBreakdown = summaries
-            .GroupBy(item => item.Type)
+        var statusBreakdown = summaries
+            .GroupBy(item => item.Status, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(group => group.Count())
             .ThenBy(group => group.Key)
-            .Take(6)
             .Select(group => new DashboardTimelinePoint(group.Key, group.Count()))
             .ToList();
 
         return new DashboardSummary
         {
             Metrics = metrics,
-            InProgress = summaries.Where(item => item.Status == ItemStatus.InProgress)
-                .OrderByDescending(item => item.Priority)
-                .ThenByDescending(item => item.ProgressPercent)
-                .Take(5)
+            LatestItems = summaries
+                .OrderByDescending(item => item.CreatedAt)
+                .Take(6)
                 .ToList(),
-            RecentlyCompleted = summaries.Where(item => item.CompletedAt.HasValue)
+            ActiveItems = summaries
+                .Where(item => ArchiveMetadata.IsInProgress(item.Category, item.Status))
+                .OrderByDescending(item => item.CreatedAt)
+                .Take(6)
+                .ToList(),
+            RecentlyCompleted = summaries
+                .Where(item => item.CompletedAt.HasValue)
                 .OrderByDescending(item => item.CompletedAt)
-                .Take(5)
-                .ToList(),
-            PriorityFocus = summaries
-                .Where(item => item.Status != ItemStatus.Completed && item.Status != ItemStatus.Abandoned)
-                .OrderByDescending(item => item.Priority)
-                .ThenBy(item => item.CreatedAt)
-                .Take(5)
+                .Take(6)
                 .ToList(),
             StatusBreakdown = statusBreakdown,
-            TypeBreakdown = typeBreakdown
+            CategoryBreakdown = categoryBreakdown
         };
     }
 
@@ -77,9 +75,8 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var items = await db.Items
             .AsNoTracking()
             .Include(item => item.Tags)
-            .Include(item => item.ChecklistEntries)
             .OrderByDescending(item => item.UpdatedAt)
-            .ThenByDescending(item => item.Priority)
+            .ThenBy(item => item.Title)
             .ToListAsync();
 
         var summaries = items.Select(MapSummary).ToList();
@@ -89,46 +86,54 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             var search = query.Search.Trim();
             summaries = summaries.Where(item =>
                     item.Title.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    item.Description.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    item.Category.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    item.Status.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    item.Review.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                     item.Notes.Contains(search, StringComparison.OrdinalIgnoreCase) ||
                     item.Tags.Any(tag => tag.Contains(search, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Type))
+        if (!string.IsNullOrWhiteSpace(query.Category))
         {
-            summaries = summaries.Where(item => string.Equals(item.Type, query.Type, StringComparison.OrdinalIgnoreCase)).ToList();
+            summaries = summaries.Where(item => item.Category.Equals(query.Category, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Tag))
+        if (!string.IsNullOrWhiteSpace(query.Status))
         {
-            summaries = summaries.Where(item => item.Tags.Any(tag => string.Equals(tag, query.Tag, StringComparison.OrdinalIgnoreCase))).ToList();
-        }
-
-        if (query.Status.HasValue)
-        {
-            summaries = summaries.Where(item => item.Status == query.Status.Value).ToList();
+            summaries = summaries.Where(item => item.Status.Equals(query.Status, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
         var groups = BuildGroups(summaries, query.GroupBy);
+        var availableCategories = items.Select(item => ArchiveMetadata.NormalizeCategory(item.Type))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order()
+            .ToList();
+
+        var availableStatuses = summaries.Select(item => item.Status)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order()
+            .ToList();
 
         return new ArchiveCatalog
         {
             Items = summaries,
             Groups = groups,
-            AvailableTypes = items.Select(item => item.Type).Distinct(StringComparer.OrdinalIgnoreCase).Order().ToList(),
-            AvailableTags = items.SelectMany(item => item.Tags.Select(tag => tag.Name)).Distinct(StringComparer.OrdinalIgnoreCase).Order().ToList()
+            AvailableCategories = availableCategories,
+            AvailableStatuses = availableStatuses
         };
     }
 
     public async Task<ItemEditorModel> CreateEditorModelAsync()
     {
         await Task.CompletedTask;
+        var category = ArchiveMetadata.Categories.First();
         return new ItemEditorModel
         {
-            Type = ArchiveMetadata.SuggestedTypes.First(),
-            CreatedAt = DateTime.Now,
-            ChecklistEntries = []
+            Category = category,
+            Status = ArchiveMetadata.GetStatuses(category).First(),
+            CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
+            CreatedAt = DateTime.Now
         };
     }
 
@@ -138,32 +143,32 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var item = await db.Items
             .AsNoTracking()
             .Include(current => current.Tags)
-            .Include(current => current.ChecklistEntries.OrderBy(entry => entry.SortOrder))
             .FirstOrDefaultAsync(current => current.Id == id);
 
-        return item is null ? null : new ItemEditorModel
+        if (item is null)
+        {
+            return null;
+        }
+
+        var category = ArchiveMetadata.NormalizeCategory(item.Type);
+        var status = ArchiveMetadata.NormalizeStatus(category, item.CatalogStatus);
+
+        return new ItemEditorModel
         {
             Id = item.Id,
             Title = item.Title,
-            Description = item.Description,
-            Type = item.Type,
-            Status = item.Status,
-            Priority = item.Priority,
-            ProgressPercent = item.ProgressPercent,
-            ProgressLabel = item.ProgressLabel ?? string.Empty,
+            CoverImageUrl = string.IsNullOrWhiteSpace(item.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : item.CoverImageUrl,
+            Category = category,
+            Status = status,
+            Rating = item.Rating,
+            Review = item.Review ?? item.Description ?? string.Empty,
             Notes = item.Notes ?? string.Empty,
             TagsText = string.Join(", ", item.Tags.OrderBy(tag => tag.Name).Select(tag => tag.Name)),
+            GameMedia = item.GameMedia ?? string.Empty,
+            GamePlatform = item.GamePlatform ?? string.Empty,
+            FinishedOnAnotherPlatform = item.FinishedOnAnotherPlatform,
             CreatedAt = item.CreatedAt.ToLocalTime(),
-            CompletedAt = item.CompletedAt?.ToLocalTime(),
-            ChecklistEntries = item.ChecklistEntries
-                .OrderBy(entry => entry.SortOrder)
-                .Select(entry => new ChecklistEntryModel
-                {
-                    Id = entry.Id,
-                    Title = entry.Title,
-                    IsCompleted = entry.IsCompleted
-                })
-                .ToList()
+            CompletedAt = item.CompletedAt?.ToLocalTime()
         };
     }
 
@@ -174,22 +179,30 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             ? await db.Items.Include(item => item.Tags).Include(item => item.ChecklistEntries).FirstAsync(item => item.Id == model.Id.Value)
             : new ArchiveItem();
 
+        var category = ArchiveMetadata.NormalizeCategory(model.Category);
+        var status = ArchiveMetadata.NormalizeStatus(category, model.Status);
+        var isGame = ArchiveMetadata.IsGameCategory(category);
+
         entity.Title = model.Title.Trim();
-        entity.Description = model.Description.Trim();
-        entity.Type = model.Type.Trim();
-        entity.Status = model.Status;
-        entity.Priority = model.Priority;
-        entity.ProgressPercent = Math.Clamp(model.ProgressPercent, 0, 100);
-        entity.ProgressLabel = NullIfWhiteSpace(model.ProgressLabel);
+        entity.Type = category;
+        entity.CatalogStatus = status;
+        entity.CoverImageUrl = string.IsNullOrWhiteSpace(model.CoverImageUrl)
+            ? ArchiveMetadata.DefaultCoverPath
+            : model.CoverImageUrl.Trim();
+        entity.Rating = model.Rating.HasValue ? Math.Round(Math.Clamp(model.Rating.Value, 0, 10), 2) : null;
+        entity.Description = model.Review.Trim();
+        entity.Review = NullIfWhiteSpace(model.Review);
         entity.Notes = NullIfWhiteSpace(model.Notes);
+        entity.GameMedia = isGame ? NullIfWhiteSpace(model.GameMedia) : null;
+        entity.GamePlatform = isGame ? NullIfWhiteSpace(model.GamePlatform) : null;
+        entity.FinishedOnAnotherPlatform = isGame && model.FinishedOnAnotherPlatform;
         entity.CreatedAt = model.Id.HasValue ? entity.CreatedAt : DateTime.SpecifyKind(model.CreatedAt, DateTimeKind.Local).ToUniversalTime();
         entity.UpdatedAt = DateTime.UtcNow;
-        entity.CompletedAt = model.Status == ItemStatus.Completed
+        entity.CompletedAt = ArchiveMetadata.IsCompleted(category, status)
             ? model.CompletedAt?.ToUniversalTime() ?? DateTime.UtcNow
             : null;
 
         ReplaceTags(entity, model.TagsText);
-        ReplaceChecklist(entity, model.ChecklistEntries);
 
         if (!model.Id.HasValue)
         {
@@ -228,23 +241,25 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var items = await LoadExportRecordsAsync(db);
 
         var builder = new StringBuilder();
-        builder.AppendLine("Id,Title,Description,Type,Status,Priority,CreatedAt,CompletedAt,ProgressPercent,ProgressLabel,Notes,Tags,Checklist");
+        builder.AppendLine("Id,Title,Category,Status,CoverImageUrl,Rating,Review,Notes,Tags,GameMedia,GamePlatform,FinishedOnAnotherPlatform,CreatedAt,CompletedAt,Checklist");
 
-        foreach (var item in items.OrderBy(current => current.Type).ThenBy(current => current.Title))
+        foreach (var item in items.OrderBy(current => current.Category).ThenBy(current => current.Title))
         {
             builder.AppendJoin(',',
                 EscapeCsv(item.Id.ToString()),
                 EscapeCsv(item.Title),
-                EscapeCsv(ToSingleLine(item.Description)),
-                EscapeCsv(item.Type),
+                EscapeCsv(item.Category),
                 EscapeCsv(item.Status),
-                EscapeCsv(item.Priority),
-                EscapeCsv(item.CreatedAt.ToString("O", CultureInfo.InvariantCulture)),
-                EscapeCsv(item.CompletedAt?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty),
-                EscapeCsv(item.ProgressPercent.ToString(CultureInfo.InvariantCulture)),
-                EscapeCsv(item.ProgressLabel ?? string.Empty),
+                EscapeCsv(item.CoverImageUrl),
+                EscapeCsv(item.Rating?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty),
+                EscapeCsv(ToSingleLine(item.Review ?? string.Empty)),
                 EscapeCsv(ToSingleLine(item.Notes ?? string.Empty)),
                 EscapeCsv(string.Join('|', item.Tags)),
+                EscapeCsv(item.GameMedia ?? string.Empty),
+                EscapeCsv(item.GamePlatform ?? string.Empty),
+                EscapeCsv(item.FinishedOnAnotherPlatform.ToString(CultureInfo.InvariantCulture)),
+                EscapeCsv(item.CreatedAt.ToString("O", CultureInfo.InvariantCulture)),
+                EscapeCsv(item.CompletedAt?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty),
                 EscapeCsv(string.Join('|', item.Checklist.Select(entry => $"{ToSingleLine(entry.Title)}::{entry.IsCompleted}"))));
 
             builder.AppendLine();
@@ -264,15 +279,34 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         builder.AppendLine($"Exportado em {DateTime.Now:dd/MM/yyyy HH:mm}");
         builder.AppendLine();
 
-        foreach (var item in items.OrderBy(current => current.Type).ThenBy(current => current.Title))
+        foreach (var item in items.OrderBy(current => current.Category).ThenBy(current => current.Title))
         {
             builder.AppendLine($"## {item.Title}");
             builder.AppendLine();
-            builder.AppendLine($"- Tipo: {item.Type}");
+            builder.AppendLine($"- Categoria: {item.Category}");
             builder.AppendLine($"- Status: {item.Status}");
-            builder.AppendLine($"- Prioridade: {item.Priority}");
-            builder.AppendLine($"- Progresso: {item.ProgressPercent:0}% {(string.IsNullOrWhiteSpace(item.ProgressLabel) ? string.Empty : $"({item.ProgressLabel})")}".TrimEnd());
+            builder.AppendLine($"- Capa: {item.CoverImageUrl}");
             builder.AppendLine($"- Criado em: {item.CreatedAt:dd/MM/yyyy}");
+
+            if (item.Rating.HasValue)
+            {
+                builder.AppendLine($"- Nota: {item.Rating:0.##}/10");
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.GameMedia))
+            {
+                builder.AppendLine($"- Midia: {item.GameMedia}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.GamePlatform))
+            {
+                builder.AppendLine($"- Plataforma: {item.GamePlatform}");
+            }
+
+            if (item.FinishedOnAnotherPlatform)
+            {
+                builder.AppendLine("- Finalizado em outra plataforma: Sim");
+            }
 
             if (item.CompletedAt.HasValue)
             {
@@ -284,30 +318,32 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
                 builder.AppendLine($"- Tags: {string.Join(", ", item.Tags)}");
             }
 
-            if (!string.IsNullOrWhiteSpace(item.Description))
+            if (!string.IsNullOrWhiteSpace(item.Review))
             {
                 builder.AppendLine();
-                builder.AppendLine(item.Description);
+                builder.AppendLine("### Resenha");
+                builder.AppendLine();
+                builder.AppendLine(item.Review);
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.Notes))
+            {
+                builder.AppendLine();
+                builder.AppendLine("### Observacoes");
+                builder.AppendLine();
+                builder.AppendLine(item.Notes);
             }
 
             if (item.Checklist.Count > 0)
             {
                 builder.AppendLine();
-                builder.AppendLine("### Checklist");
+                builder.AppendLine("### Checklist legado");
                 builder.AppendLine();
 
                 foreach (var entry in item.Checklist)
                 {
                     builder.AppendLine($"- [{(entry.IsCompleted ? "x" : " ")}] {entry.Title}");
                 }
-            }
-
-            if (!string.IsNullOrWhiteSpace(item.Notes))
-            {
-                builder.AppendLine();
-                builder.AppendLine("### Notas");
-                builder.AppendLine();
-                builder.AppendLine(item.Notes);
             }
 
             builder.AppendLine();
@@ -368,19 +404,22 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
 
         foreach (var row in rows.Skip(1).Where(current => current.Any(value => !string.IsNullOrWhiteSpace(value))))
         {
+            var category = GetValue(row, index, "Category");
             created.Add(new ArchiveItemRecord(
                 ParseGuid(GetValue(row, index, "Id")),
                 GetValue(row, index, "Title"),
-                GetValue(row, index, "Description"),
-                GetValue(row, index, "Type"),
+                string.IsNullOrWhiteSpace(category) ? GetValue(row, index, "Type") : category,
                 GetValue(row, index, "Status"),
-                GetValue(row, index, "Priority"),
-                ParseDate(GetValue(row, index, "CreatedAt")) ?? DateTime.UtcNow,
-                ParseDate(GetValue(row, index, "CompletedAt")),
-                ParseDouble(GetValue(row, index, "ProgressPercent")),
-                GetValue(row, index, "ProgressLabel"),
+                GetValue(row, index, "CoverImageUrl"),
+                ParseNullableDouble(GetValue(row, index, "Rating")),
+                GetValue(row, index, "Review"),
                 GetValue(row, index, "Notes"),
                 SplitPipeList(GetValue(row, index, "Tags")),
+                GetValue(row, index, "GameMedia"),
+                GetValue(row, index, "GamePlatform"),
+                ParseBool(GetValue(row, index, "FinishedOnAnotherPlatform")),
+                ParseDate(GetValue(row, index, "CreatedAt")) ?? DateTime.UtcNow,
+                ParseDate(GetValue(row, index, "CompletedAt")),
                 SplitChecklist(GetValue(row, index, "Checklist"))));
         }
 
@@ -403,10 +442,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
 
             if (entity is null)
             {
-                entity = new ArchiveItem
-                {
-                    Id = id
-                };
+                entity = new ArchiveItem { Id = id };
                 db.Items.Add(entity);
                 created++;
             }
@@ -415,24 +451,27 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
                 updated++;
             }
 
+            var category = ArchiveMetadata.NormalizeCategory(record.Category);
+            var status = ArchiveMetadata.NormalizeStatus(category, record.Status);
+            var isGame = ArchiveMetadata.IsGameCategory(category);
+
             entity.Title = record.Title.Trim();
-            entity.Description = record.Description.Trim();
-            entity.Type = string.IsNullOrWhiteSpace(record.Type) ? "Outro" : record.Type.Trim();
-            entity.Status = ParseStatus(record.Status);
-            entity.Priority = ParsePriority(record.Priority);
+            entity.Type = category;
+            entity.CatalogStatus = status;
+            entity.CoverImageUrl = string.IsNullOrWhiteSpace(record.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : record.CoverImageUrl.Trim();
+            entity.Rating = record.Rating.HasValue ? Math.Round(Math.Clamp(record.Rating.Value, 0, 10), 2) : null;
+            entity.Description = record.Review?.Trim() ?? string.Empty;
+            entity.Review = NullIfWhiteSpace(record.Review);
+            entity.Notes = NullIfWhiteSpace(record.Notes);
+            entity.GameMedia = isGame ? NullIfWhiteSpace(record.GameMedia) : null;
+            entity.GamePlatform = isGame ? NullIfWhiteSpace(record.GamePlatform) : null;
+            entity.FinishedOnAnotherPlatform = isGame && record.FinishedOnAnotherPlatform;
             entity.CreatedAt = record.CreatedAt == default ? DateTime.UtcNow : DateTime.SpecifyKind(record.CreatedAt, DateTimeKind.Utc);
             entity.UpdatedAt = DateTime.UtcNow;
-            entity.CompletedAt = record.CompletedAt;
-            entity.ProgressPercent = Math.Clamp(record.ProgressPercent, 0, 100);
-            entity.ProgressLabel = NullIfWhiteSpace(record.ProgressLabel);
-            entity.Notes = NullIfWhiteSpace(record.Notes);
+            entity.CompletedAt = ArchiveMetadata.IsCompleted(category, status) ? record.CompletedAt ?? DateTime.UtcNow : null;
 
             ReplaceTags(entity, string.Join(", ", record.Tags));
-            ReplaceChecklist(entity, record.Checklist.Select(entry => new ChecklistEntryModel
-            {
-                Title = entry.Title,
-                IsCompleted = entry.IsCompleted
-            }));
+            ReplaceChecklist(entity, record.Checklist.Select(entry => new ChecklistRecord(entry.Title, entry.IsCompleted)));
         }
 
         await db.SaveChangesAsync();
@@ -443,24 +482,16 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
     {
         return groupBy switch
         {
-            ArchiveGroupBy.None => [new ArchiveGroup("Todos os itens", items.OrderByDescending(item => item.Priority).ThenBy(item => item.Title).ToList())],
-            ArchiveGroupBy.Type => items
-                .GroupBy(item => item.Type)
+            ArchiveGroupBy.None => [new ArchiveGroup("Todos os itens", items.OrderBy(item => item.Category).ThenBy(item => item.Title).ToList())],
+            ArchiveGroupBy.Category => items
+                .GroupBy(item => item.Category, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(group => group.Key)
-                .Select(group => new ArchiveGroup(group.Key, group.OrderByDescending(item => item.Priority).ThenBy(item => item.Title).ToList()))
+                .Select(group => new ArchiveGroup(group.Key, group.OrderBy(item => item.Title).ToList()))
                 .ToList(),
             ArchiveGroupBy.Status => items
-                .GroupBy(item => item.Status)
+                .GroupBy(item => item.Status, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(group => group.Key)
-                .Select(group => new ArchiveGroup(group.Key.GetLabel(), group.OrderByDescending(item => item.Priority).ThenBy(item => item.Title).ToList()))
-                .ToList(),
-            ArchiveGroupBy.Tag => items
-                .SelectMany(item => item.Tags.Count > 0
-                    ? item.Tags.Select(tag => new { Group = tag, Item = item })
-                    : [new { Group = "Sem tags", Item = item }])
-                .GroupBy(entry => entry.Group)
-                .OrderBy(group => group.Key)
-                .Select(group => new ArchiveGroup(group.Key, group.Select(entry => entry.Item).OrderByDescending(item => item.Priority).ThenBy(item => item.Title).ToList()))
+                .Select(group => new ArchiveGroup(group.Key, group.OrderBy(item => item.Category).ThenBy(item => item.Title).ToList()))
                 .ToList(),
             _ => []
         };
@@ -468,29 +499,24 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
 
     private static ArchiveListItemSummary MapSummary(ArchiveItem item)
     {
-        var tags = item.Tags
-            .Select(tag => tag.Name)
-            .OrderBy(tag => tag)
-            .ToList();
-
-        var checklistTotal = item.ChecklistEntries.Count;
-        var checklistCompleted = item.ChecklistEntries.Count(entry => entry.IsCompleted);
+        var category = ArchiveMetadata.NormalizeCategory(item.Type);
+        var status = ArchiveMetadata.NormalizeStatus(category, item.CatalogStatus);
 
         return new ArchiveListItemSummary(
             item.Id,
             item.Title,
-            item.Description,
-            item.Type,
-            item.Status,
-            item.Priority,
-            item.ProgressPercent,
-            item.ProgressLabel ?? string.Empty,
+            category,
+            status,
+            string.IsNullOrWhiteSpace(item.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : item.CoverImageUrl,
+            item.Rating,
             item.CreatedAt.ToLocalTime(),
             item.CompletedAt?.ToLocalTime(),
+            item.Review ?? item.Description ?? string.Empty,
             item.Notes ?? string.Empty,
-            tags,
-            checklistCompleted,
-            checklistTotal);
+            item.Tags.Select(tag => tag.Name).OrderBy(tag => tag).ToList(),
+            item.GameMedia,
+            item.GamePlatform,
+            item.FinishedOnAnotherPlatform);
     }
 
     private static void ReplaceTags(ArchiveItem entity, string tagsText)
@@ -504,7 +530,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         }
     }
 
-    private static void ReplaceChecklist(ArchiveItem entity, IEnumerable<ChecklistEntryModel> checklistEntries)
+    private static void ReplaceChecklist(ArchiveItem entity, IEnumerable<ChecklistRecord> checklistEntries)
     {
         entity.ChecklistEntries.Clear();
 
@@ -533,16 +559,18 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             .Select(item => new ArchiveItemRecord(
                 item.Id,
                 item.Title,
-                item.Description,
                 item.Type,
-                item.Status.ToString(),
-                item.Priority.ToString(),
-                item.CreatedAt,
-                item.CompletedAt,
-                item.ProgressPercent,
-                item.ProgressLabel,
+                item.CatalogStatus,
+                item.CoverImageUrl,
+                item.Rating,
+                item.Review,
                 item.Notes,
                 item.Tags.OrderBy(tag => tag.Name).Select(tag => tag.Name).ToList(),
+                item.GameMedia,
+                item.GamePlatform,
+                item.FinishedOnAnotherPlatform,
+                item.CreatedAt,
+                item.CompletedAt,
                 item.ChecklistEntries.OrderBy(entry => entry.SortOrder).Select(entry => new ChecklistRecord(entry.Title, entry.IsCompleted)).ToList()))
             .ToListAsync();
     }
@@ -620,13 +648,16 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
     private static string GetValue(string[] row, IReadOnlyDictionary<string, int> index, string column)
         => index.TryGetValue(column, out var valueIndex) && valueIndex < row.Length ? row[valueIndex] : string.Empty;
 
-    private static double ParseDouble(string value)
-        => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : 0;
-
     private static DateTime? ParseDate(string value)
         => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var result) ? result : null;
 
     private static Guid ParseGuid(string value) => Guid.TryParse(value, out var result) ? result : Guid.Empty;
+
+    private static double? ParseNullableDouble(string value)
+        => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result) ? result : null;
+
+    private static bool ParseBool(string value)
+        => bool.TryParse(value, out var result) && result;
 
     private static IReadOnlyList<string> SplitPipeList(string value)
         => value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -643,27 +674,23 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             .Where(entry => !string.IsNullOrWhiteSpace(entry.Title))
             .ToList();
 
-    private static ItemStatus ParseStatus(string value)
-        => Enum.TryParse<ItemStatus>(value, true, out var parsed) ? parsed : ItemStatus.NotStarted;
-
-    private static ItemPriority ParsePriority(string value)
-        => Enum.TryParse<ItemPriority>(value, true, out var parsed) ? parsed : ItemPriority.Medium;
-
     private sealed record ArchiveExportDocument(DateTime ExportedAt, List<ArchiveItemRecord> Items);
 
     private sealed record ArchiveItemRecord(
         Guid Id,
         string Title,
-        string Description,
-        string Type,
+        string Category,
         string Status,
-        string Priority,
-        DateTime CreatedAt,
-        DateTime? CompletedAt,
-        double ProgressPercent,
-        string? ProgressLabel,
+        string CoverImageUrl,
+        double? Rating,
+        string? Review,
         string? Notes,
         IReadOnlyList<string> Tags,
+        string? GameMedia,
+        string? GamePlatform,
+        bool FinishedOnAnotherPlatform,
+        DateTime CreatedAt,
+        DateTime? CompletedAt,
         IReadOnlyList<ChecklistRecord> Checklist);
 
     private sealed record ChecklistRecord(string Title, bool IsCompleted);

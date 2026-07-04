@@ -1,70 +1,52 @@
 @page "/items"
 @inject ArchiveApiClient ArchiveClient
 
-<PageTitle>Itens | MyArchive</PageTitle>
+<PageTitle>Acervo | MyArchive</PageTitle>
 
 <section class="page-header">
     <div>
-        <p class="section-kicker">Catalogo</p>
-        <h1>Todos os itens em um unico acervo consultavel.</h1>
-        <p class="hero-copy">Filtre, pesquise e agrupe por tipo, status ou tags sem perder o historico.</p>
+        <p class="section-kicker">Acervo</p>
+        <h1>Uma estante visual para tudo o que voce le, assiste e joga.</h1>
+        <p class="hero-copy">Filtre por categoria e status, com capas em destaque e informacoes rapidas de cada obra.</p>
     </div>
 
-    <a class="button-link" href="/items/new">Novo item</a>
+    <a class="button-link" href="/items/new">Nova obra</a>
 </section>
 
 <section class="panel-card filter-panel">
     <div class="filter-grid">
-        <label>
+        <label class="full-span">
             <span>Busca</span>
-            <InputText class="input-field" @bind-Value="_query.Search" placeholder="Titulo, descricao, nota ou tag" />
+            <InputText class="input-field" @bind-Value="_query.Search" placeholder="Titulo, resenha, observacao ou categoria" />
         </label>
 
         <label>
-            <span>Tipo</span>
-            <InputSelect class="input-field" @bind-Value="_query.Type">
-                <option value="">Todos</option>
-                @if (_catalog is not null)
+            <span>Categoria</span>
+            <select class="input-field" value="@_query.Category" @onchange="HandleCategoryFilterChanged">
+                <option value="">Todas</option>
+                @foreach (var category in GetCategoryOptions())
                 {
-                    @foreach (var type in _catalog.AvailableTypes)
-                    {
-                        <option value="@type">@type</option>
-                    }
+                    <option value="@category">@category</option>
                 }
-            </InputSelect>
+            </select>
         </label>
 
         <label>
             <span>Status</span>
-            <InputSelect TValue="ItemStatus?" class="input-field" @bind-Value="_query.Status">
+            <select class="input-field" value="@_query.Status" @onchange="HandleStatusFilterChanged">
                 <option value="">Todos</option>
-                @foreach (var status in Enum.GetValues<ItemStatus>())
+                @foreach (var status in GetStatusOptions())
                 {
-                    <option value="@status">@status.GetLabel()</option>
+                    <option value="@status">@status</option>
                 }
-            </InputSelect>
-        </label>
-
-        <label>
-            <span>Tag</span>
-            <InputSelect class="input-field" @bind-Value="_query.Tag">
-                <option value="">Todas</option>
-                @if (_catalog is not null)
-                {
-                    @foreach (var tag in _catalog.AvailableTags)
-                    {
-                        <option value="@tag">@tag</option>
-                    }
-                }
-            </InputSelect>
+            </select>
         </label>
 
         <label>
             <span>Agrupar por</span>
             <InputSelect class="input-field" @bind-Value="_query.GroupBy">
-                <option value="@ArchiveGroupBy.Type">Tipo</option>
+                <option value="@ArchiveGroupBy.Category">Categoria</option>
                 <option value="@ArchiveGroupBy.Status">Status</option>
-                <option value="@ArchiveGroupBy.Tag">Tag</option>
                 <option value="@ArchiveGroupBy.None">Sem agrupamento</option>
             </InputSelect>
         </label>
@@ -85,7 +67,7 @@
 else if (_catalog.Items.Count == 0)
 {
     <section class="panel-card">
-        <p class="empty-copy">Nenhum item encontrado com os filtros atuais.</p>
+        <p class="empty-copy">Nenhuma obra encontrada com os filtros atuais.</p>
     </section>
 }
 else
@@ -99,58 +81,52 @@ else
                         <p class="section-kicker">Agrupamento</p>
                         <h2>@group.Title</h2>
                     </div>
-                    <span class="count-chip">@group.Items.Count item(ns)</span>
+                    <span class="count-chip">@group.Items.Count obra(s)</span>
                 </div>
 
                 <div class="catalog-grid">
                     @foreach (var item in group.Items)
                     {
-                        <article class="catalog-card">
-                            <div class="item-header">
-                                <strong>@item.Title</strong>
-                                <span class="pill @item.Priority.GetCssClass()">@item.Priority.GetLabel()</span>
-                            </div>
+                        <article class="catalog-card library-card">
+                            <img class="catalog-cover" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
 
-                            <p class="card-meta">@item.Type · <span class="pill @item.Status.GetCssClass()">@item.Status.GetLabel()</span></p>
-                            <p class="card-copy">@GetDescription(item)</p>
-
-                            <div class="progress-cluster">
-                                <div class="progress-topline">
-                                    <span>Progresso</span>
-                                    <strong>@item.ProgressPercent.ToString("0")%</strong>
+                            <div class="catalog-body">
+                                <div class="item-header">
+                                    <strong>@item.Title</strong>
+                                    @if (item.Rating.HasValue)
+                                    {
+                                        <span class="pill rating-pill">@item.Rating.Value.ToString("0.##")</span>
+                                    }
                                 </div>
-                                <div class="progress-track">
-                                    <div class="progress-fill" style="@($"width: {item.ProgressPercent:0.##}%")"></div>
+
+                                <p class="card-meta">
+                                    @item.Category · <span class="pill @ArchiveMetadata.GetStatusCssClass(item.Status)">@item.Status</span>
+                                </p>
+
+                                <p class="card-copy">@GetReviewExcerpt(item)</p>
+
+                                @if (ArchiveMetadata.IsGameCategory(item.Category))
+                                {
+                                    <p class="detail-copy">@GetGameDetails(item)</p>
+                                }
+
+                                @if (!string.IsNullOrWhiteSpace(item.Notes))
+                                {
+                                    <p class="detail-copy">@GetNotesExcerpt(item.Notes)</p>
+                                }
+
+                                <div class="card-actions">
+                                    <a class="inline-link" href="/items/@item.Id">Editar</a>
+                                    @if (_pendingDeleteId == item.Id)
+                                    {
+                                        <button type="button" class="inline-button danger" @onclick="() => DeleteAsync(item.Id)">Confirmar exclusao</button>
+                                        <button type="button" class="inline-button" @onclick="ClearPendingDelete">Cancelar</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="inline-button" @onclick="() => SetPendingDelete(item.Id)">Excluir</button>
+                                    }
                                 </div>
-                                @if (!string.IsNullOrWhiteSpace(item.ProgressLabel))
-                                {
-                                    <small>@item.ProgressLabel</small>
-                                }
-                            </div>
-
-                            <div class="tag-row">
-                                @foreach (var tag in item.Tags)
-                                {
-                                    <span class="tag-chip">@tag</span>
-                                }
-                            </div>
-
-                            @if (item.ChecklistTotal > 0)
-                            {
-                                <p class="checklist-copy">@item.ChecklistCompleted/@item.ChecklistTotal subtarefas concluidas</p>
-                            }
-
-                            <div class="card-actions">
-                                <a class="inline-link" href="/items/@item.Id">Editar</a>
-                                @if (_pendingDeleteId == item.Id)
-                                {
-                                    <button type="button" class="inline-button danger" @onclick="() => DeleteAsync(item.Id)">Confirmar exclusao</button>
-                                    <button type="button" class="inline-button" @onclick="ClearPendingDelete">Cancelar</button>
-                                }
-                                else
-                                {
-                                    <button type="button" class="inline-button" @onclick="() => SetPendingDelete(item.Id)">Excluir</button>
-                                }
                             </div>
                         </article>
                     }
@@ -174,15 +150,15 @@ else
     {
         _catalog = await ArchiveClient.GetCatalogAsync(_query);
         _pendingDeleteId = null;
+        SyncStatusFilter();
     }
 
     private async Task ResetFiltersAsync()
     {
         _query.Search = string.Empty;
-        _query.Type = string.Empty;
-        _query.Tag = string.Empty;
-        _query.Status = null;
-        _query.GroupBy = ArchiveGroupBy.Type;
+        _query.Category = string.Empty;
+        _query.Status = string.Empty;
+        _query.GroupBy = ArchiveGroupBy.Category;
         await LoadAsync();
     }
 
@@ -196,6 +172,76 @@ else
         await LoadAsync();
     }
 
-    private static string GetDescription(ArchiveListItemSummary item)
-        => string.IsNullOrWhiteSpace(item.Description) ? "Sem descricao registrada." : item.Description;
+    private IReadOnlyList<string> GetCategoryOptions()
+        => _catalog?.AvailableCategories.Count > 0 ? _catalog.AvailableCategories : ArchiveMetadata.Categories;
+
+    private IReadOnlyList<string> GetStatusOptions()
+    {
+        if (!string.IsNullOrWhiteSpace(_query.Category))
+        {
+            return ArchiveMetadata.GetStatuses(_query.Category);
+        }
+
+        return ArchiveMetadata.Categories
+            .SelectMany(category => ArchiveMetadata.GetStatuses(category))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order()
+            .ToList();
+    }
+
+    private void SyncStatusFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_query.Status))
+        {
+            return;
+        }
+
+        var allowedStatuses = GetStatusOptions();
+        if (!allowedStatuses.Contains(_query.Status, StringComparer.OrdinalIgnoreCase))
+        {
+            _query.Status = string.Empty;
+        }
+    }
+
+    private void HandleCategoryFilterChanged(ChangeEventArgs args)
+    {
+        _query.Category = args.Value?.ToString() ?? string.Empty;
+        SyncStatusFilter();
+    }
+
+    private void HandleStatusFilterChanged(ChangeEventArgs args)
+    {
+        _query.Status = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private static string GetReviewExcerpt(ArchiveListItemSummary item)
+    {
+        var content = string.IsNullOrWhiteSpace(item.Review) ? "Sem resenha registrada." : item.Review;
+        return content.Length > 150 ? $"{content[..150]}..." : content;
+    }
+
+    private static string GetNotesExcerpt(string notes)
+        => notes.Length > 110 ? $"{notes[..110]}..." : notes;
+
+    private static string GetGameDetails(ArchiveListItemSummary item)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(item.GamePlatform))
+        {
+            parts.Add(item.GamePlatform);
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.GameMedia))
+        {
+            parts.Add(item.GameMedia);
+        }
+
+        if (item.FinishedOnAnotherPlatform)
+        {
+            parts.Add("Finalizado em outra plataforma");
+        }
+
+        return parts.Count == 0 ? "Sem detalhes adicionais para esta versao." : string.Join(" · ", parts);
+    }
 }

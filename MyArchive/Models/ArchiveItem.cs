@@ -19,6 +19,22 @@ public sealed class ArchiveItem
 
     public ItemPriority Priority { get; set; } = ItemPriority.Medium;
 
+    [Required]
+    public string CatalogStatus { get; set; } = string.Empty;
+
+    [Required]
+    public string CoverImageUrl { get; set; } = ArchiveMetadata.DefaultCoverPath;
+
+    public double? Rating { get; set; }
+
+    public string? Review { get; set; }
+
+    public string? GameMedia { get; set; }
+
+    public string? GamePlatform { get; set; }
+
+    public bool FinishedOnAnotherPlatform { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

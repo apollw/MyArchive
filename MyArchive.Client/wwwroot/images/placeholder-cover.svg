@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" role="img" aria-labelledby="title desc">
+  <title id="title">Placeholder de capa</title>
+  <desc id="desc">Capa ilustrativa do MyArchive.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f4dfc2"/>
+      <stop offset="100%" stop-color="#dfb37a"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="800" rx="42" fill="url(#bg)"/>
+  <rect x="56" y="56" width="488" height="688" rx="28" fill="#fff7ee" opacity="0.72"/>
+  <rect x="104" y="132" width="392" height="432" rx="22" fill="#cb7f34" opacity="0.18"/>
+  <path d="M170 500c34-86 92-168 170-232 34 30 80 88 130 172-52 68-108 120-176 162-54-28-94-60-124-102Z" fill="#9b5622" opacity="0.72"/>
+  <circle cx="222" cy="242" r="32" fill="#fff7ee" opacity="0.85"/>
+  <text x="300" y="644" font-family="Georgia, 'Times New Roman', serif" font-size="58" text-anchor="middle" fill="#24324d">MyArchive</text>
+  <text x="300" y="698" font-family="Segoe UI, Arial, sans-serif" font-size="24" text-anchor="middle" fill="#576074">Biblioteca pessoal digital</text>
+</svg>

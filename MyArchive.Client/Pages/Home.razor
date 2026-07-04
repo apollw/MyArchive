@@ -7,7 +7,7 @@
 {
     <section class="hero-panel">
         <p class="section-kicker">Carregando</p>
-        <h1>Montando o panorama do seu acervo.</h1>
+        <h1>Montando a biblioteca do seu acervo.</h1>
     </section>
 }
 else
@@ -15,16 +15,16 @@ else
     <section class="hero-panel">
         <div>
             <p class="section-kicker">Dashboard</p>
-            <h1>Uma visao rapida do que merece atencao agora.</h1>
+            <h1>Uma biblioteca pessoal pensada para obras, nao para tarefas.</h1>
             <p class="hero-copy">
-                MyArchive centraliza leitura, estudos, entretenimento e projetos em um fluxo simples:
-                capturar, acompanhar, concluir e manter historico portavel.
+                Cadastre capas, acompanhe status por categoria, registre notas e mantenha uma visao
+                clara do que foi lido, assistido ou finalizado.
             </p>
         </div>
 
         <div class="hero-actions">
-            <a class="button-link" href="/items/new">Cadastrar item</a>
-            <a class="button-link muted" href="/library">Exportar dados</a>
+            <a class="button-link" href="/items/new">Cadastrar obra</a>
+            <a class="button-link muted" href="/items">Abrir acervo</a>
         </div>
     </section>
 
@@ -42,31 +42,30 @@ else
         <article class="panel-card">
             <div class="panel-heading">
                 <div>
-                    <p class="section-kicker">Fila ativa</p>
-                    <h2>Itens em andamento</h2>
+                    <p class="section-kicker">Recem adicionados</p>
+                    <h2>Ultimos registros</h2>
                 </div>
-                <a class="inline-link" href="/items">Ver catalogo</a>
             </div>
 
-            @if (_dashboard.InProgress.Count == 0)
+            @if (_dashboard.LatestItems.Count == 0)
             {
-                <p class="empty-copy">Nenhum item em andamento no momento.</p>
+                <p class="empty-copy">Nenhum item cadastrado ainda.</p>
             }
             else
             {
                 <div class="stack-list">
-                    @foreach (var item in _dashboard.InProgress)
+                    @foreach (var item in _dashboard.LatestItems)
                     {
-                        <article class="item-row">
+                        <article class="media-row">
+                            <img class="media-thumb" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
                             <div>
                                 <div class="item-header">
                                     <strong>@item.Title</strong>
-                                    <span class="pill @item.Priority.GetCssClass()">@item.Priority.GetLabel()</span>
+                                    <span class="pill @ArchiveMetadata.GetStatusCssClass(item.Status)">@item.Status</span>
                                 </div>
-                                <p>@item.Type · @item.Status.GetLabel()</p>
-                                <small>@FormatProgress(item)</small>
+                                <p>@item.Category</p>
+                                <small>@item.CreatedAt.ToString("dd/MM/yyyy")</small>
                             </div>
-                            <a class="inline-link" href="/items/@item.Id">Editar</a>
                         </article>
                     }
                 </div>
@@ -76,8 +75,44 @@ else
         <article class="panel-card">
             <div class="panel-heading">
                 <div>
-                    <p class="section-kicker">Historico</p>
-                    <h2>Concluidos recentemente</h2>
+                    <p class="section-kicker">Em andamento</p>
+                    <h2>Consumindo agora</h2>
+                </div>
+            </div>
+
+            @if (_dashboard.ActiveItems.Count == 0)
+            {
+                <p class="empty-copy">Nenhuma obra em andamento no momento.</p>
+            }
+            else
+            {
+                <div class="stack-list">
+                    @foreach (var item in _dashboard.ActiveItems)
+                    {
+                        <article class="media-row">
+                            <img class="media-thumb" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
+                            <div>
+                                <div class="item-header">
+                                    <strong>@item.Title</strong>
+                                    @if (item.Rating.HasValue)
+                                    {
+                                        <span class="pill rating-pill">@item.Rating.Value.ToString("0.##")</span>
+                                    }
+                                </div>
+                                <p>@item.Category · @item.Status</p>
+                                <small>@GetGameLine(item)</small>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="panel-card">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-kicker">Concluidos</p>
+                    <h2>Historico recente</h2>
                 </div>
             </div>
 
@@ -90,12 +125,13 @@ else
                 <div class="stack-list">
                     @foreach (var item in _dashboard.RecentlyCompleted)
                     {
-                        <article class="item-row compact">
+                        <article class="media-row">
+                            <img class="media-thumb" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
                             <div>
                                 <strong>@item.Title</strong>
-                                <p>@item.Type · @(item.CompletedAt?.ToString("dd/MM/yyyy") ?? "-")</p>
+                                <p>@item.Category · @item.Status</p>
+                                <small>@(item.CompletedAt?.ToString("dd/MM/yyyy") ?? "-")</small>
                             </div>
-                            <span class="pill status-completed">100%</span>
                         </article>
                     }
                 </div>
@@ -105,40 +141,27 @@ else
         <article class="panel-card">
             <div class="panel-heading">
                 <div>
-                    <p class="section-kicker">Prioridades</p>
-                    <h2>Proximos itens de foco</h2>
+                    <p class="section-kicker">Categorias</p>
+                    <h2>Distribuicao do acervo</h2>
                 </div>
             </div>
 
-            @if (_dashboard.PriorityFocus.Count == 0)
-            {
-                <p class="empty-copy">Seu backlog esta zerado.</p>
-            }
-            else
-            {
-                <div class="stack-list">
-                    @foreach (var item in _dashboard.PriorityFocus)
-                    {
-                        <article class="item-row">
-                            <div>
-                                <div class="item-header">
-                                    <strong>@item.Title</strong>
-                                    <span class="pill @item.Status.GetCssClass()">@item.Status.GetLabel()</span>
-                                </div>
-                                <p>@item.Type</p>
-                            </div>
-                            <span class="pill @item.Priority.GetCssClass()">@item.Priority.GetLabel()</span>
-                        </article>
-                    }
-                </div>
-            }
+            <div class="type-grid">
+                @foreach (var point in _dashboard.CategoryBreakdown.Where(point => point.Value > 0))
+                {
+                    <article class="type-card">
+                        <span>@point.Label</span>
+                        <strong>@point.Value</strong>
+                    </article>
+                }
+            </div>
         </article>
 
-        <article class="panel-card">
+        <article class="panel-card wide">
             <div class="panel-heading">
                 <div>
-                    <p class="section-kicker">Estatisticas</p>
-                    <h2>Panorama por status</h2>
+                    <p class="section-kicker">Status</p>
+                    <h2>Panorama por andamento</h2>
                 </div>
             </div>
 
@@ -155,25 +178,6 @@ else
                 }
             </div>
         </article>
-
-        <article class="panel-card wide">
-            <div class="panel-heading">
-                <div>
-                    <p class="section-kicker">Categorias</p>
-                    <h2>Tipos mais presentes</h2>
-                </div>
-            </div>
-
-            <div class="type-grid">
-                @foreach (var point in _dashboard.TypeBreakdown)
-                {
-                    <article class="type-card">
-                        <span>@point.Label</span>
-                        <strong>@point.Value</strong>
-                    </article>
-                }
-            </div>
-        </article>
     </section>
 }
 
@@ -185,10 +189,31 @@ else
         _dashboard = await ArchiveClient.GetDashboardAsync();
     }
 
-    private static string FormatProgress(ArchiveListItemSummary item)
-        => string.IsNullOrWhiteSpace(item.ProgressLabel)
-            ? $"{item.ProgressPercent:0}%"
-            : $"{item.ProgressPercent:0}% · {item.ProgressLabel}";
+    private static string GetGameLine(ArchiveListItemSummary item)
+    {
+        if (!ArchiveMetadata.IsGameCategory(item.Category))
+        {
+            return item.Review.Length > 72 ? $"{item.Review[..72]}..." : item.Review;
+        }
+
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(item.GamePlatform))
+        {
+            parts.Add(item.GamePlatform);
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.GameMedia))
+        {
+            parts.Add(item.GameMedia);
+        }
+
+        if (item.FinishedOnAnotherPlatform)
+        {
+            parts.Add("Finalizado em outra plataforma");
+        }
+
+        return parts.Count == 0 ? "Sem detalhes adicionais." : string.Join(" · ", parts);
+    }
 
     private static double GetRatio(int value, IReadOnlyList<DashboardTimelinePoint> points)
     {
