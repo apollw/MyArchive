@@ -2,55 +2,113 @@ namespace MyArchive.Shared;
 
 public static class ArchiveMetadata
 {
-    public static readonly IReadOnlyList<string> SuggestedTypes =
+    public const string DefaultCoverPath = "/images/placeholder-cover.svg";
+
+    public static readonly IReadOnlyList<string> Categories =
     [
-        "Livro",
-        "Filme",
-        "Serie",
-        "Anime",
-        "Jogo",
-        "Curso",
-        "Projeto",
-        "Artigo",
-        "Documento",
-        "Outro"
+        "Livros",
+        "Mangas",
+        "HQs",
+        "Games",
+        "Filmes",
+        "Series",
+        "Series animadas",
+        "Animes"
     ];
 
-    public static string GetLabel(this ItemStatus status) => status switch
-    {
-        ItemStatus.NotStarted => "Nao iniciado",
-        ItemStatus.InProgress => "Em andamento",
-        ItemStatus.Completed => "Concluido",
-        ItemStatus.Paused => "Pausado",
-        ItemStatus.Abandoned => "Abandonado",
-        _ => status.ToString()
-    };
+    public static readonly IReadOnlyList<string> GameMediaOptions =
+    [
+        "Fisica",
+        "Digital"
+    ];
 
-    public static string GetLabel(this ItemPriority priority) => priority switch
-    {
-        ItemPriority.Low => "Baixa",
-        ItemPriority.Medium => "Media",
-        ItemPriority.High => "Alta",
-        ItemPriority.Critical => "Critica",
-        _ => priority.ToString()
-    };
+    public static readonly IReadOnlyList<string> GamePlatformOptions =
+    [
+        "PS1",
+        "PS2",
+        "PS3",
+        "PS4",
+        "PS5",
+        "Xbox 360",
+        "Xbox One",
+        "Xbox Series",
+        "Nintendo Switch",
+        "PC",
+        "Outros"
+    ];
 
-    public static string GetCssClass(this ItemPriority priority) => priority switch
-    {
-        ItemPriority.Low => "priority-low",
-        ItemPriority.Medium => "priority-medium",
-        ItemPriority.High => "priority-high",
-        ItemPriority.Critical => "priority-critical",
-        _ => "priority-medium"
-    };
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> StatusesByCategory =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Livros"] = ["Nao lido", "Lendo", "Lido"],
+            ["Mangas"] = ["Nao lido", "Lendo", "Lido"],
+            ["HQs"] = ["Nao lido", "Lendo", "Lido"],
+            ["Games"] = ["Nao finalizado", "Jogando", "Finalizado", "Gratuito", "Outro dono", "Nao zeravel"],
+            ["Filmes"] = ["Nao visto", "Vendo", "Assistido"],
+            ["Series"] = ["Nao vista", "Vendo", "Assistida"],
+            ["Series animadas"] = ["Nao vista", "Vendo", "Assistida"],
+            ["Animes"] = ["Nao vista", "Vendo", "Assistida"]
+        };
 
-    public static string GetCssClass(this ItemStatus status) => status switch
+    private static readonly HashSet<string> InProgressStatuses =
+    [
+        "Lendo",
+        "Jogando",
+        "Vendo"
+    ];
+
+    private static readonly HashSet<string> CompletedStatuses =
+    [
+        "Lido",
+        "Finalizado",
+        "Assistido",
+        "Assistida"
+    ];
+
+    public static IReadOnlyList<string> GetStatuses(string? category)
     {
-        ItemStatus.NotStarted => "status-not-started",
-        ItemStatus.InProgress => "status-in-progress",
-        ItemStatus.Completed => "status-completed",
-        ItemStatus.Paused => "status-paused",
-        ItemStatus.Abandoned => "status-abandoned",
-        _ => "status-not-started"
-    };
+        var normalizedCategory = NormalizeCategory(category);
+        return StatusesByCategory[normalizedCategory];
+    }
+
+    public static string NormalizeCategory(string? category)
+        => Categories.FirstOrDefault(item => item.Equals(category, StringComparison.OrdinalIgnoreCase))
+           ?? Categories.First();
+
+    public static string NormalizeStatus(string? category, string? status)
+    {
+        var statuses = GetStatuses(category);
+        return statuses.FirstOrDefault(item => item.Equals(status, StringComparison.OrdinalIgnoreCase))
+               ?? statuses[0];
+    }
+
+    public static string GetStatusCssClass(string? status)
+        => NormalizeStatusLabel(status) switch
+        {
+            "Lido" or "Finalizado" or "Assistido" or "Assistida" => "status-completed",
+            "Lendo" or "Jogando" or "Vendo" => "status-in-progress",
+            "Nao lido" or "Nao finalizado" or "Nao visto" or "Nao vista" => "status-not-started",
+            "Gratuito" => "status-freebie",
+            "Outro dono" => "status-borrowed",
+            "Nao zeravel" => "status-nonfinishable",
+            _ => "status-not-started"
+        };
+
+    public static bool IsGameCategory(string? category)
+        => string.Equals(NormalizeCategory(category), "Games", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsNotStarted(string? category, string? status)
+        => string.Equals(NormalizeStatus(category, status), GetStatuses(category).First(), StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsInProgress(string? category, string? status)
+        => InProgressStatuses.Contains(NormalizeStatus(category, status));
+
+    public static bool IsCompleted(string? category, string? status)
+        => CompletedStatuses.Contains(NormalizeStatus(category, status));
+
+    public static string GetGroupTitle(ArchiveGroupBy groupBy, string key)
+        => groupBy == ArchiveGroupBy.Status ? NormalizeStatusLabel(key) : NormalizeCategory(key);
+
+    public static string NormalizeStatusLabel(string? status)
+        => status?.Trim() ?? string.Empty;
 }

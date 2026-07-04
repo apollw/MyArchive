@@ -5,9 +5,8 @@ namespace MyArchive.Shared;
 public enum ArchiveGroupBy
 {
     None,
-    Type,
-    Status,
-    Tag
+    Category,
+    Status
 }
 
 public enum ImportFormat
@@ -19,27 +18,26 @@ public enum ImportFormat
 public sealed class ArchiveQuery
 {
     public string Search { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty;
-    public string Tag { get; set; } = string.Empty;
-    public ItemStatus? Status { get; set; }
-    public ArchiveGroupBy GroupBy { get; set; } = ArchiveGroupBy.Type;
+    public string Category { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public ArchiveGroupBy GroupBy { get; set; } = ArchiveGroupBy.Category;
 }
 
 public sealed record ArchiveListItemSummary(
     Guid Id,
     string Title,
-    string Description,
-    string Type,
-    ItemStatus Status,
-    ItemPriority Priority,
-    double ProgressPercent,
-    string ProgressLabel,
+    string Category,
+    string Status,
+    string CoverImageUrl,
+    double? Rating,
     DateTime CreatedAt,
     DateTime? CompletedAt,
+    string Review,
     string Notes,
     IReadOnlyList<string> Tags,
-    int ChecklistCompleted,
-    int ChecklistTotal);
+    string? GameMedia,
+    string? GamePlatform,
+    bool FinishedOnAnotherPlatform);
 
 public sealed record ArchiveGroup(string Title, IReadOnlyList<ArchiveListItemSummary> Items);
 
@@ -47,8 +45,8 @@ public sealed class ArchiveCatalog
 {
     public required IReadOnlyList<ArchiveListItemSummary> Items { get; init; }
     public required IReadOnlyList<ArchiveGroup> Groups { get; init; }
-    public required IReadOnlyList<string> AvailableTypes { get; init; }
-    public required IReadOnlyList<string> AvailableTags { get; init; }
+    public required IReadOnlyList<string> AvailableCategories { get; init; }
+    public required IReadOnlyList<string> AvailableStatuses { get; init; }
 }
 
 public sealed record DashboardMetric(string Label, string Value, string Accent);
@@ -58,11 +56,11 @@ public sealed record DashboardTimelinePoint(string Label, int Value);
 public sealed class DashboardSummary
 {
     public required IReadOnlyList<DashboardMetric> Metrics { get; init; }
-    public required IReadOnlyList<ArchiveListItemSummary> InProgress { get; init; }
+    public required IReadOnlyList<ArchiveListItemSummary> LatestItems { get; init; }
+    public required IReadOnlyList<ArchiveListItemSummary> ActiveItems { get; init; }
     public required IReadOnlyList<ArchiveListItemSummary> RecentlyCompleted { get; init; }
-    public required IReadOnlyList<ArchiveListItemSummary> PriorityFocus { get; init; }
     public required IReadOnlyList<DashboardTimelinePoint> StatusBreakdown { get; init; }
-    public required IReadOnlyList<DashboardTimelinePoint> TypeBreakdown { get; init; }
+    public required IReadOnlyList<DashboardTimelinePoint> CategoryBreakdown { get; init; }
 }
 
 public sealed class ItemEditorModel
@@ -73,42 +71,40 @@ public sealed class ItemEditorModel
     [StringLength(160)]
     public string Title { get; set; } = string.Empty;
 
-    [StringLength(4000)]
-    public string Description { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Capa e obrigatoria.")]
+    [StringLength(500)]
+    public string CoverImageUrl { get; set; } = ArchiveMetadata.DefaultCoverPath;
 
-    [Required(ErrorMessage = "Tipo e obrigatorio.")]
+    [Required(ErrorMessage = "Categoria e obrigatoria.")]
     [StringLength(80)]
-    public string Type { get; set; } = "Outro";
+    public string Category { get; set; } = ArchiveMetadata.Categories.First();
 
-    [Required]
-    public ItemStatus Status { get; set; } = ItemStatus.NotStarted;
+    [Required(ErrorMessage = "Status e obrigatorio.")]
+    [StringLength(80)]
+    public string Status { get; set; } = string.Empty;
 
-    [Required]
-    public ItemPriority Priority { get; set; } = ItemPriority.Medium;
+    [Range(0, 10, ErrorMessage = "A nota deve ficar entre 0 e 10.")]
+    public double? Rating { get; set; }
 
-    [Range(0, 100)]
-    public double ProgressPercent { get; set; }
-
-    [StringLength(120)]
-    public string ProgressLabel { get; set; } = string.Empty;
+    [StringLength(20000)]
+    public string Review { get; set; } = string.Empty;
 
     [StringLength(12000)]
     public string Notes { get; set; } = string.Empty;
 
     public string TagsText { get; set; } = string.Empty;
 
+    [StringLength(40)]
+    public string GameMedia { get; set; } = string.Empty;
+
+    [StringLength(60)]
+    public string GamePlatform { get; set; } = string.Empty;
+
+    public bool FinishedOnAnotherPlatform { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime? CompletedAt { get; set; }
-
-    public List<ChecklistEntryModel> ChecklistEntries { get; set; } = [];
-}
-
-public sealed class ChecklistEntryModel
-{
-    public Guid? Id { get; set; }
-    public string Title { get; set; } = string.Empty;
-    public bool IsCompleted { get; set; }
 }
 
 public sealed record ImportSummary(int Created, int Updated, int TotalProcessed, string Message);

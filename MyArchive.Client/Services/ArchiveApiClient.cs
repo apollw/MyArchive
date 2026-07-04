@@ -25,19 +25,14 @@ public sealed class ArchiveApiClient(HttpClient httpClient, ArchiveClientOptions
             values.Add($"search={Uri.EscapeDataString(query.Search)}");
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Type))
+        if (!string.IsNullOrWhiteSpace(query.Category))
         {
-            values.Add($"type={Uri.EscapeDataString(query.Type)}");
+            values.Add($"category={Uri.EscapeDataString(query.Category)}");
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Tag))
+        if (!string.IsNullOrWhiteSpace(query.Status))
         {
-            values.Add($"tag={Uri.EscapeDataString(query.Tag)}");
-        }
-
-        if (query.Status.HasValue)
-        {
-            values.Add($"status={query.Status.Value}");
+            values.Add($"status={Uri.EscapeDataString(query.Status)}");
         }
 
         values.Add($"groupBy={query.GroupBy}");
@@ -96,9 +91,14 @@ public sealed class ArchiveApiClient(HttpClient httpClient, ArchiveClientOptions
     }
 
     public static ItemEditorModel CreateNewItem()
-        => new()
+    {
+        var category = ArchiveMetadata.Categories.First();
+        return new ItemEditorModel
         {
-            Type = ArchiveMetadata.SuggestedTypes.First(),
+            Category = category,
+            Status = ArchiveMetadata.GetStatuses(category).First(),
+            CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
             CreatedAt = DateTime.Now
         };
+    }
 }
