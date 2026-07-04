@@ -4,10 +4,16 @@
 
 .brand-mark {
     display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
+    justify-content: center;
     text-decoration: none;
     color: var(--surface-text);
+}
+
+.brand-logo {
+    width: min(100%, 13rem);
+    max-height: 8.5rem;
+    object-fit: contain;
+    filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.28));
 }
 
 .brand-mark strong {
