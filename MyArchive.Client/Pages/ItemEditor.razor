@@ -32,6 +32,11 @@ else
         <DataAnnotationsValidator />
         <ValidationSummary />
 
+        @if (!string.IsNullOrWhiteSpace(_saveError))
+        {
+            <div class="form-alert">@_saveError</div>
+        }
+
         <section class="panel-card form-grid">
             <label>
                 <span>Categoria</span>
@@ -98,6 +103,71 @@ else
             </label>
         </section>
 
+        @if (ArchiveMetadata.IsTrackableUnitCategory(Model.Category))
+        {
+            <section class="panel-card episode-panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="section-kicker">Conteudo sequencial</p>
+                        <h2>@(_isNew ? $"Estrutura de {UnitPlural}" : $"Acompanhamento de {UnitPlural}")</h2>
+                    </div>
+                    <span class="count-chip">@CompletedEpisodeCount/@Model.Episodes.Count @UnitCompletedPlural</span>
+                </div>
+
+                <div class="episode-tools">
+                    <label>
+                        <span>Quantidade total</span>
+                        <InputNumber TValue="int" class="input-field" @bind-Value="_episodeTargetCount" />
+                    </label>
+
+                    <div class="toolbar-actions episode-actions">
+                        <button type="button" class="button-link" @onclick="ApplyEpisodeCount">Aplicar quantidade</button>
+                        <button type="button" class="button-link muted" @onclick="AddEpisode">Adicionar @UnitSingular</button>
+                        <button type="button" class="button-link muted" @onclick="RemoveLastEpisode" disabled="@(Model.Episodes.Count == 0)">Remover ultimo</button>
+                    </div>
+                </div>
+
+                @if (Model.Episodes.Count > 0)
+                {
+                    <div class="toolbar-actions episode-actions compact-actions">
+                        <button type="button" class="button-link muted" @onclick="MarkAllEpisodesCompleted">Marcar todos como @UnitCompletedPlural</button>
+                        <button type="button" class="button-link muted" @onclick="ClearAllEpisodes">Limpar marcados</button>
+                    </div>
+                }
+
+                @if (Model.Episodes.Count == 0)
+                {
+                    <p class="empty-copy">Informe a quantidade total e clique em aplicar para gerar os @UnitPlural.</p>
+                }
+                else if (_isNew)
+                {
+                    <div class="episode-create-summary">
+                        <strong>@Model.Episodes.Count @UnitPlural serao criados.</strong>
+                        <span>@GetCreationEpisodeSummary()</span>
+                        <small>A marcacao individual fica disponivel depois de salvar, na tela de edicao da obra.</small>
+                    </div>
+                }
+                else
+                {
+                    <p class="detail-copy">Marque ou desmarque os @UnitPlural conforme avanca e salve a obra para persistir o acompanhamento.</p>
+                    <div class="episode-grid" aria-label="Checklist de unidades">
+                        @for (var index = 0; index < Model.Episodes.Count; index++)
+                        {
+                            var episode = Model.Episodes[index];
+                            var episodeNumber = index + 1;
+                            <button type="button"
+                                    class="episode-pill @(episode.IsCompleted ? "done" : string.Empty)"
+                                    aria-pressed="@episode.IsCompleted"
+                                    @onclick="() => ToggleEpisode(episode)">
+                                <span class="episode-dot"></span>
+                                <span>@episodeNumber</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
         @if (ArchiveMetadata.IsGameCategory(Model.Category))
         {
             <section class="panel-card form-grid">
@@ -143,13 +213,22 @@ else
 }
 
 @code {
+    private const int MaxEpisodeCount = 2000;
+
     [Parameter]
     public Guid? ItemId { get; set; }
 
     private ItemEditorModel Model { get; set; } = new();
     private bool _loading = true;
     private bool _notFound;
+    private int _episodeTargetCount;
+    private string _saveError = string.Empty;
     private bool _isNew => !ItemId.HasValue;
+    private int CompletedEpisodeCount => Model.Episodes.Count(episode => episode.IsCompleted);
+    private bool AllEpisodesCompleted => Model.Episodes.Count > 0 && CompletedEpisodeCount == Model.Episodes.Count;
+    private string UnitSingular => ArchiveMetadata.GetUnitSingular(Model.Category);
+    private string UnitPlural => ArchiveMetadata.GetUnitPlural(Model.Category);
+    private string UnitCompletedPlural => ArchiveMetadata.IsEpisodicCategory(Model.Category) ? "vistos" : "lidos";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -171,6 +250,7 @@ else
             {
                 Model = existing;
                 EnsureValidStatus();
+                NormalizeEpisodes();
             }
         }
         else
@@ -178,6 +258,7 @@ else
             _notFound = true;
         }
 
+        SyncEpisodeTargetCount();
         _loading = false;
     }
 
@@ -185,6 +266,13 @@ else
     {
         Model.Category = args.Value?.ToString() ?? ArchiveMetadata.Categories.First();
         EnsureValidStatus();
+
+        if (!ArchiveMetadata.IsTrackableUnitCategory(Model.Category))
+        {
+            Model.Episodes.Clear();
+        }
+
+        SyncEpisodeTargetCount();
 
         if (!ArchiveMetadata.IsGameCategory(Model.Category))
         {
@@ -200,10 +288,130 @@ else
         Model.Status = ArchiveMetadata.NormalizeStatus(Model.Category, Model.Status);
     }
 
+    private void ApplyEpisodeCount()
+    {
+        _episodeTargetCount = Math.Clamp(_episodeTargetCount, 0, MaxEpisodeCount);
+        var completeNewEpisodes = AllEpisodesCompleted;
+
+        while (Model.Episodes.Count < _episodeTargetCount)
+        {
+            AddEpisode(syncTarget: false, isCompleted: completeNewEpisodes);
+        }
+
+        while (Model.Episodes.Count > _episodeTargetCount)
+        {
+            Model.Episodes.RemoveAt(Model.Episodes.Count - 1);
+        }
+
+        NormalizeEpisodes();
+    }
+
+    private void AddEpisode() => AddEpisode(syncTarget: true, isCompleted: false);
+
+    private void AddEpisode(bool syncTarget, bool isCompleted)
+    {
+        if (Model.Episodes.Count >= MaxEpisodeCount)
+        {
+            return;
+        }
+
+        var nextNumber = Model.Episodes.Count + 1;
+        Model.Episodes.Add(new EpisodeEditorModel
+        {
+            Title = ArchiveMetadata.GetUnitTitle(Model.Category, nextNumber),
+            IsCompleted = isCompleted,
+            SortOrder = nextNumber - 1
+        });
+
+        if (syncTarget)
+        {
+            SyncEpisodeTargetCount();
+        }
+    }
+
+    private void RemoveLastEpisode()
+    {
+        if (Model.Episodes.Count == 0)
+        {
+            return;
+        }
+
+        Model.Episodes.RemoveAt(Model.Episodes.Count - 1);
+        NormalizeEpisodes();
+        SyncEpisodeTargetCount();
+    }
+
+    private static void ToggleEpisode(EpisodeEditorModel episode)
+        => episode.IsCompleted = !episode.IsCompleted;
+
+    private void MarkAllEpisodesCompleted()
+    {
+        foreach (var episode in Model.Episodes)
+        {
+            episode.IsCompleted = true;
+        }
+    }
+
+    private void ClearAllEpisodes()
+    {
+        foreach (var episode in Model.Episodes)
+        {
+            episode.IsCompleted = false;
+        }
+    }
+
+    private string GetCreationEpisodeSummary()
+    {
+        if (Model.Episodes.Count == 0)
+        {
+            return $"Nenhum {UnitSingular} configurado.";
+        }
+
+        return AllEpisodesCompleted
+            ? $"Todos entrarao como {UnitCompletedPlural}."
+            : CompletedEpisodeCount == 0
+                ? "Todos entrarao como nao vistos."
+                : $"{CompletedEpisodeCount} entrarao como {UnitCompletedPlural}.";
+    }
+
+    private void SyncEpisodeTargetCount()
+        => _episodeTargetCount = Model.Episodes.Count;
+
+    private void NormalizeEpisodes()
+    {
+        for (var index = 0; index < Model.Episodes.Count; index++)
+        {
+            Model.Episodes[index].SortOrder = index;
+            Model.Episodes[index].Title = ArchiveMetadata.GetUnitTitle(Model.Category, index + 1);
+        }
+    }
+
     private async Task SaveAsync()
     {
+        _saveError = string.Empty;
         EnsureValidStatus();
-        var saved = await ArchiveClient.SaveItemAsync(Model);
-        Navigation.NavigateTo($"/items/{saved.Id}");
+
+        if (ArchiveMetadata.IsTrackableUnitCategory(Model.Category))
+        {
+            NormalizeEpisodes();
+        }
+        else
+        {
+            Model.Episodes.Clear();
+        }
+
+        try
+        {
+            var saved = await ArchiveClient.SaveItemAsync(Model);
+            Navigation.NavigateTo($"/items/{saved.Id}");
+        }
+        catch (HttpRequestException exception)
+        {
+            _saveError = $"Nao foi possivel salvar a obra. A API retornou erro: {exception.Message}";
+        }
+        catch (InvalidOperationException exception)
+        {
+            _saveError = $"Nao foi possivel salvar a obra. {exception.Message}";
+        }
     }
 }

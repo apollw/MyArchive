@@ -21,6 +21,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var items = await db.Items
             .AsNoTracking()
             .Include(item => item.Tags)
+            .Include(item => item.ChecklistEntries)
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync();
 
@@ -75,6 +76,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var items = await db.Items
             .AsNoTracking()
             .Include(item => item.Tags)
+            .Include(item => item.ChecklistEntries)
             .OrderByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.Title)
             .ToListAsync();
@@ -143,6 +145,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var item = await db.Items
             .AsNoTracking()
             .Include(current => current.Tags)
+            .Include(current => current.ChecklistEntries)
             .FirstOrDefaultAsync(current => current.Id == id);
 
         if (item is null)
@@ -168,7 +171,18 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             GamePlatform = item.GamePlatform ?? string.Empty,
             FinishedOnAnotherPlatform = item.FinishedOnAnotherPlatform,
             CreatedAt = item.CreatedAt.ToLocalTime(),
-            CompletedAt = item.CompletedAt?.ToLocalTime()
+            CompletedAt = item.CompletedAt?.ToLocalTime(),
+            Episodes = item.ChecklistEntries
+                .OrderBy(entry => entry.SortOrder)
+                .ThenBy(entry => entry.Title)
+                .Select(entry => new EpisodeEditorModel
+                {
+                    Id = entry.Id,
+                    Title = entry.Title,
+                    IsCompleted = entry.IsCompleted,
+                    SortOrder = entry.SortOrder
+                })
+                .ToList()
         };
     }
 
@@ -176,7 +190,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
     {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var entity = model.Id.HasValue
-            ? await db.Items.Include(item => item.Tags).Include(item => item.ChecklistEntries).FirstAsync(item => item.Id == model.Id.Value)
+            ? await db.Items.FirstAsync(item => item.Id == model.Id.Value)
             : new ArchiveItem();
 
         var category = ArchiveMetadata.NormalizeCategory(model.Category);
@@ -202,12 +216,33 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             ? model.CompletedAt?.ToUniversalTime() ?? DateTime.UtcNow
             : null;
 
-        ReplaceTags(entity, model.TagsText);
-
         if (!model.Id.HasValue)
         {
             db.Items.Add(entity);
         }
+        else
+        {
+            await db.Tags.Where(tag => tag.ArchiveItemId == entity.Id).ExecuteDeleteAsync();
+            await db.ChecklistEntries.Where(entry => entry.ArchiveItemId == entity.Id).ExecuteDeleteAsync();
+        }
+
+        db.Tags.AddRange(ParseTagNames(model.TagsText).Select(tag => new ItemTag
+        {
+            ArchiveItemId = entity.Id,
+            Name = tag
+        }));
+
+        var checklist = ArchiveMetadata.IsTrackableUnitCategory(category)
+            ? model.Episodes.OrderBy(entry => entry.SortOrder).Select((entry, index) => new ChecklistRecord(GetUnitTitle(category, entry, index), entry.IsCompleted))
+            : [];
+
+        db.ChecklistEntries.AddRange(checklist.Select((entry, index) => new ItemChecklistEntry
+        {
+            ArchiveItemId = entity.Id,
+            Title = entry.Title.Trim(),
+            IsCompleted = entry.IsCompleted,
+            SortOrder = index
+        }));
 
         await db.SaveChangesAsync();
         return entity.Id;
@@ -516,19 +551,27 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             item.Tags.Select(tag => tag.Name).OrderBy(tag => tag).ToList(),
             item.GameMedia,
             item.GamePlatform,
-            item.FinishedOnAnotherPlatform);
+            item.FinishedOnAnotherPlatform,
+            item.ChecklistEntries.Count,
+            item.ChecklistEntries.Count(entry => entry.IsCompleted));
     }
+
+    private static string GetUnitTitle(string category, EpisodeEditorModel entry, int index)
+        => string.IsNullOrWhiteSpace(entry.Title) ? ArchiveMetadata.GetUnitTitle(category, index + 1) : entry.Title.Trim();
 
     private static void ReplaceTags(ArchiveItem entity, string tagsText)
     {
         entity.Tags.Clear();
 
-        foreach (var tag in tagsText.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var tag in ParseTagNames(tagsText))
         {
             entity.Tags.Add(new ItemTag { Name = tag });
         }
     }
+
+    private static IEnumerable<string> ParseTagNames(string tagsText)
+        => tagsText.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     private static void ReplaceChecklist(ArchiveItem entity, IEnumerable<ChecklistRecord> checklistEntries)
     {
@@ -539,6 +582,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         {
             entity.ChecklistEntries.Add(new ItemChecklistEntry
             {
+                ArchiveItemId = entity.Id,
                 Title = entry.Title.Trim(),
                 IsCompleted = entry.IsCompleted,
                 SortOrder = index++

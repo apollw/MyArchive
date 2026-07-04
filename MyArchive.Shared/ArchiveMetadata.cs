@@ -8,7 +8,8 @@ public static class ArchiveMetadata
     [
         "Livros",
         "Mangas",
-        "HQs",
+        "HQs Singles",
+        "HQs Encadernados",
         "Games",
         "Filmes",
         "Series",
@@ -42,7 +43,8 @@ public static class ArchiveMetadata
         {
             ["Livros"] = ["Nao lido", "Lendo", "Lido"],
             ["Mangas"] = ["Nao lido", "Lendo", "Lido"],
-            ["HQs"] = ["Nao lido", "Lendo", "Lido"],
+            ["HQs Singles"] = ["Nao lido", "Lendo", "Lido"],
+            ["HQs Encadernados"] = ["Nao lido", "Lendo", "Lido"],
             ["Games"] = ["Nao finalizado", "Jogando", "Finalizado", "Gratuito", "Outro dono", "Nao zeravel"],
             ["Filmes"] = ["Nao visto", "Vendo", "Assistido"],
             ["Series"] = ["Nao vista", "Vendo", "Assistida"],
@@ -72,8 +74,15 @@ public static class ArchiveMetadata
     }
 
     public static string NormalizeCategory(string? category)
-        => Categories.FirstOrDefault(item => item.Equals(category, StringComparison.OrdinalIgnoreCase))
-           ?? Categories.First();
+    {
+        if (string.Equals(category?.Trim(), "HQs", StringComparison.OrdinalIgnoreCase))
+        {
+            return "HQs Encadernados";
+        }
+
+        return Categories.FirstOrDefault(item => item.Equals(category, StringComparison.OrdinalIgnoreCase))
+               ?? Categories.First();
+    }
 
     public static string NormalizeStatus(string? category, string? status)
     {
@@ -96,6 +105,46 @@ public static class ArchiveMetadata
 
     public static bool IsGameCategory(string? category)
         => string.Equals(NormalizeCategory(category), "Games", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsEpisodicCategory(string? category)
+    {
+        var normalizedCategory = NormalizeCategory(category);
+        return normalizedCategory is "Series" or "Series animadas" or "Animes";
+    }
+
+    public static bool IsTrackableUnitCategory(string? category)
+    {
+        var normalizedCategory = NormalizeCategory(category);
+        return normalizedCategory is "Mangas" or "HQs Singles" or "Series" or "Series animadas" or "Animes";
+    }
+
+    public static string GetUnitSingular(string? category)
+    {
+        var normalizedCategory = NormalizeCategory(category);
+        return normalizedCategory switch
+        {
+            "Mangas" => "volume",
+            "HQs Singles" => "numero",
+            _ => "episodio"
+        };
+    }
+
+    public static string GetUnitPlural(string? category)
+    {
+        var normalizedCategory = NormalizeCategory(category);
+        return normalizedCategory switch
+        {
+            "Mangas" => "volumes",
+            "HQs Singles" => "numeros",
+            _ => "episodios"
+        };
+    }
+
+    public static string GetUnitTitle(string? category, int number)
+    {
+        var label = GetUnitSingular(category);
+        return $"{char.ToUpperInvariant(label[0])}{label[1..]} {number}";
+    }
 
     public static bool IsNotStarted(string? category, string? status)
         => string.Equals(NormalizeStatus(category, status), GetStatuses(category).First(), StringComparison.OrdinalIgnoreCase);

@@ -37,7 +37,9 @@ public sealed record ArchiveListItemSummary(
     IReadOnlyList<string> Tags,
     string? GameMedia,
     string? GamePlatform,
-    bool FinishedOnAnotherPlatform);
+    bool FinishedOnAnotherPlatform,
+    int EpisodeCount,
+    int CompletedEpisodeCount);
 
 public sealed record ArchiveGroup(string Title, IReadOnlyList<ArchiveListItemSummary> Items);
 
@@ -105,6 +107,20 @@ public sealed class ItemEditorModel
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime? CompletedAt { get; set; }
+
+    public List<EpisodeEditorModel> Episodes { get; set; } = [];
+}
+
+public sealed class EpisodeEditorModel
+{
+    public Guid? Id { get; set; }
+
+    [StringLength(200)]
+    public string Title { get; set; } = string.Empty;
+
+    public bool IsCompleted { get; set; }
+
+    public int SortOrder { get; set; }
 }
 
 public sealed record ImportSummary(int Created, int Updated, int TotalProcessed, string Message);

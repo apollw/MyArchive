@@ -677,3 +677,127 @@ label > span {
         min-height: 220px;
     }
 }
+.episode-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+.episode-tools {
+    display: grid;
+    grid-template-columns: minmax(12rem, 16rem) 1fr;
+    gap: 1rem;
+    align-items: end;
+}
+
+.episode-actions {
+    margin: 0;
+}
+
+.episode-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
+    gap: 0.55rem;
+    max-height: 28rem;
+    overflow: auto;
+    padding: 0.25rem 0.2rem 0.35rem;
+}
+
+.episode-pill {
+    min-height: 2.45rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid rgba(36, 50, 77, 0.14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.64);
+    color: var(--ink-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.episode-pill:hover {
+    transform: translateY(-1px);
+    border-color: rgba(203, 127, 52, 0.5);
+}
+
+.episode-pill.done {
+    background: rgba(76, 132, 95, 0.16);
+    border-color: rgba(76, 132, 95, 0.44);
+    color: #315f40;
+}
+
+.episode-dot {
+    width: 0.58rem;
+    height: 0.58rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    background: transparent;
+}
+
+.episode-pill.done .episode-dot {
+    background: currentColor;
+}
+
+.episode-progress {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.episode-progress-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    color: var(--muted-text);
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.episode-progress-track {
+    height: 0.42rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(36, 50, 77, 0.1);
+}
+
+.episode-progress-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #4c845f, #cb7f34);
+}
+
+@media (max-width: 720px) {
+    .episode-tools {
+        grid-template-columns: 1fr;
+    }
+}
+.form-alert {
+    padding: 0.9rem 1rem;
+    border: 1px solid rgba(153, 54, 54, 0.28);
+    border-radius: 1rem;
+    background: rgba(153, 54, 54, 0.1);
+    color: #7d2d2d;
+    font-weight: 700;
+}
+
+.compact-actions {
+    margin-top: -0.25rem;
+}
+
+.episode-create-summary {
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem;
+    border-radius: 1rem;
+    background: rgba(36, 50, 77, 0.06);
+    border: 1px solid rgba(36, 50, 77, 0.08);
+    color: var(--ink-text);
+}
+
+.episode-create-summary span,
+.episode-create-summary small {
+    color: var(--muted-text);
+}

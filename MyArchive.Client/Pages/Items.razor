@@ -110,6 +110,19 @@ else
                                     <p class="detail-copy">@GetGameDetails(item)</p>
                                 }
 
+                                @if (ArchiveMetadata.IsTrackableUnitCategory(item.Category) && item.EpisodeCount > 0)
+                                {
+                                    <div class="episode-progress">
+                                        <div class="episode-progress-line">
+                                            <span>@item.CompletedEpisodeCount/@item.EpisodeCount @GetUnitProgressLabel(item)</span>
+                                            <span>@GetEpisodeProgressPercent(item)%</span>
+                                        </div>
+                                        <div class="episode-progress-track">
+                                            <span style="@GetEpisodeProgressStyle(item)"></span>
+                                        </div>
+                                    </div>
+                                }
+
                                 @if (!string.IsNullOrWhiteSpace(item.Notes))
                                 {
                                     <p class="detail-copy">@GetNotesExcerpt(item.Notes)</p>
@@ -172,8 +185,8 @@ else
         await LoadAsync();
     }
 
-    private IReadOnlyList<string> GetCategoryOptions()
-        => _catalog?.AvailableCategories.Count > 0 ? _catalog.AvailableCategories : ArchiveMetadata.Categories;
+    private static IReadOnlyList<string> GetCategoryOptions()
+        => ArchiveMetadata.Categories;
 
     private IReadOnlyList<string> GetStatusOptions()
     {
@@ -222,6 +235,19 @@ else
 
     private static string GetNotesExcerpt(string notes)
         => notes.Length > 110 ? $"{notes[..110]}..." : notes;
+
+    private static string GetUnitProgressLabel(ArchiveListItemSummary item)
+    {
+        var unitPlural = ArchiveMetadata.GetUnitPlural(item.Category);
+        var action = ArchiveMetadata.IsEpisodicCategory(item.Category) ? "vistos" : "lidos";
+        return $"{unitPlural} {action}";
+    }
+
+    private static int GetEpisodeProgressPercent(ArchiveListItemSummary item)
+        => item.EpisodeCount == 0 ? 0 : (int)Math.Round(item.CompletedEpisodeCount * 100d / item.EpisodeCount);
+
+    private static string GetEpisodeProgressStyle(ArchiveListItemSummary item)
+        => $"width: {GetEpisodeProgressPercent(item)}%;";
 
     private static string GetGameDetails(ArchiveListItemSummary item)
     {
