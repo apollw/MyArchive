@@ -25,6 +25,8 @@ public sealed class ArchiveItem
     [Required]
     public string CoverImageUrl { get; set; } = ArchiveMetadata.DefaultCoverPath;
 
+    public string? CoverThumbnailUrl { get; set; }
+
     public double? Rating { get; set; }
 
     public string? Review { get; set; }

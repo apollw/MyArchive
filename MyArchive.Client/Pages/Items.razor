@@ -88,7 +88,7 @@ else
                     @foreach (var item in group.Items)
                     {
                         <article class="catalog-card library-card">
-                            <img class="catalog-cover" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
+                            <img class="catalog-cover" src="@GetCoverSource(item)" alt="Capa de @item.Title" />
 
                             <div class="catalog-body">
                                 <div class="item-header">
@@ -225,6 +225,16 @@ else
     private void HandleStatusFilterChanged(ChangeEventArgs args)
     {
         _query.Status = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private static string GetCoverSource(ArchiveListItemSummary item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.CoverThumbnailUrl))
+        {
+            return item.CoverThumbnailUrl;
+        }
+
+        return string.IsNullOrWhiteSpace(item.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : item.CoverImageUrl;
     }
 
     private static string GetReviewExcerpt(ArchiveListItemSummary item)

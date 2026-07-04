@@ -19,7 +19,8 @@ public sealed class MyArchiveDbContext(DbContextOptions<MyArchiveDbContext> opti
             entity.Property(item => item.Description).HasMaxLength(4000);
             entity.Property(item => item.Type).HasMaxLength(80).IsRequired();
             entity.Property(item => item.CatalogStatus).HasMaxLength(80).IsRequired();
-            entity.Property(item => item.CoverImageUrl).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.CoverImageUrl).HasColumnType("text").IsRequired();
+            entity.Property(item => item.CoverThumbnailUrl).HasColumnType("text");
             entity.Property(item => item.Review).HasMaxLength(20000);
             entity.Property(item => item.GameMedia).HasMaxLength(40);
             entity.Property(item => item.GamePlatform).HasMaxLength(60);

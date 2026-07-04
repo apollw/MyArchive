@@ -57,7 +57,7 @@ else
                     @foreach (var item in _dashboard.LatestItems)
                     {
                         <article class="media-row">
-                            <img class="media-thumb" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
+                            <img class="media-thumb" src="@GetCoverSource(item)" alt="Capa de @item.Title" />
                             <div>
                                 <div class="item-header">
                                     <strong>@item.Title</strong>
@@ -90,7 +90,7 @@ else
                     @foreach (var item in _dashboard.ActiveItems)
                     {
                         <article class="media-row">
-                            <img class="media-thumb" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
+                            <img class="media-thumb" src="@GetCoverSource(item)" alt="Capa de @item.Title" />
                             <div>
                                 <div class="item-header">
                                     <strong>@item.Title</strong>
@@ -126,7 +126,7 @@ else
                     @foreach (var item in _dashboard.RecentlyCompleted)
                     {
                         <article class="media-row">
-                            <img class="media-thumb" src="@item.CoverImageUrl" alt="Capa de @item.Title" />
+                            <img class="media-thumb" src="@GetCoverSource(item)" alt="Capa de @item.Title" />
                             <div>
                                 <strong>@item.Title</strong>
                                 <p>@item.Category · @item.Status</p>
@@ -187,6 +187,16 @@ else
     protected override async Task OnInitializedAsync()
     {
         _dashboard = await ArchiveClient.GetDashboardAsync();
+    }
+
+    private static string GetCoverSource(ArchiveListItemSummary item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.CoverThumbnailUrl))
+        {
+            return item.CoverThumbnailUrl;
+        }
+
+        return string.IsNullOrWhiteSpace(item.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : item.CoverImageUrl;
     }
 
     private static string GetGameLine(ArchiveListItemSummary item)

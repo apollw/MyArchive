@@ -2,6 +2,7 @@
 @page "/items/{ItemId:guid}"
 @inject ArchiveApiClient ArchiveClient
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>@(_isNew ? "Nova obra" : "Editar obra") | MyArchive</PageTitle>
 
@@ -63,13 +64,41 @@ else
                 <InputText class="input-field" @bind-Value="Model.Title" />
             </label>
 
-            <label class="full-span">
-                <span>URL da capa</span>
-                <InputText class="input-field" @bind-Value="Model.CoverImageUrl" placeholder="https://..." />
-            </label>
+            <div class="cover-editor full-span">
+                @if (IsUploadedCover)
+                {
+                    <div class="cover-source-note">
+                        <span>Imagem enviada e salva junto da obra.</span>
+                        <button type="button" class="inline-button" @onclick="UseExternalCoverUrl">Usar URL externa</button>
+                        <button type="button" class="inline-button danger" @onclick="RemoveCoverImage">Excluir imagem</button>
+                    </div>
+                }
+                else
+                {
+                    <label>
+                        <span>URL da capa</span>
+                        <InputText class="input-field" @bind-Value="Model.CoverImageUrl" placeholder="https://..." />
+                    </label>
+                }
 
-            <div class="cover-preview-shell full-span">
-                <img class="cover-preview" src="@Model.CoverImageUrl" alt="Previa da capa de @Model.Title" />
+                <div class="cover-preview-shell">
+                    <label class="cover-upload-target" for="cover-upload">
+                        <img class="cover-preview" src="@Model.CoverImageUrl" alt="Previa da capa de @Model.Title" />
+                        <span class="cover-upload-caption">Clique na capa para enviar imagem</span>
+                    </label>
+
+                    <InputFile id="cover-upload" class="cover-file-input" OnChange="HandleCoverUploadAsync" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
+
+                    @if (!IsDefaultCover)
+                    {
+                        <button type="button" class="inline-button danger cover-remove-button" @onclick="RemoveCoverImage">Excluir imagem da capa</button>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(_coverError))
+                    {
+                        <p class="error-copy cover-error">@_coverError</p>
+                    }
+                </div>
             </div>
 
             <label>
@@ -214,6 +243,14 @@ else
 
 @code {
     private const int MaxEpisodeCount = 2000;
+    private const long MaxOriginalCoverBytes = 20 * 1024 * 1024;
+    private const long MaxProcessedCoverBytes = 2 * 1024 * 1024;
+    private const int MinCoverWidth = 240;
+    private const int MinCoverHeight = 320;
+    private const int MaxCoverWidth = 720;
+    private const int MaxCoverHeight = 1080;
+    private const int ThumbnailCoverWidth = 260;
+    private const int ThumbnailCoverHeight = 390;
 
     [Parameter]
     public Guid? ItemId { get; set; }
@@ -223,12 +260,15 @@ else
     private bool _notFound;
     private int _episodeTargetCount;
     private string _saveError = string.Empty;
+    private string _coverError = string.Empty;
     private bool _isNew => !ItemId.HasValue;
     private int CompletedEpisodeCount => Model.Episodes.Count(episode => episode.IsCompleted);
     private bool AllEpisodesCompleted => Model.Episodes.Count > 0 && CompletedEpisodeCount == Model.Episodes.Count;
     private string UnitSingular => ArchiveMetadata.GetUnitSingular(Model.Category);
     private string UnitPlural => ArchiveMetadata.GetUnitPlural(Model.Category);
     private string UnitCompletedPlural => ArchiveMetadata.IsEpisodicCategory(Model.Category) ? "vistos" : "lidos";
+    private bool IsUploadedCover => Model.CoverImageUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase);
+    private bool IsDefaultCover => string.Equals(Model.CoverImageUrl, ArchiveMetadata.DefaultCoverPath, StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -286,6 +326,66 @@ else
     {
         Model.Category = ArchiveMetadata.NormalizeCategory(Model.Category);
         Model.Status = ArchiveMetadata.NormalizeStatus(Model.Category, Model.Status);
+    }
+
+    private async Task HandleCoverUploadAsync(InputFileChangeEventArgs args)
+    {
+        _coverError = string.Empty;
+        var file = args.File;
+
+        if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            _coverError = "Envie um arquivo de imagem valido.";
+            return;
+        }
+
+        if (file.Size > MaxOriginalCoverBytes)
+        {
+            _coverError = "A imagem original deve ter no maximo 20 MB.";
+            return;
+        }
+
+        try
+        {
+            var dimensions = await JS.InvokeAsync<CoverImageDimensions>("myArchiveCover.getDimensions", "cover-upload");
+            if (dimensions.Width < MinCoverWidth || dimensions.Height < MinCoverHeight)
+            {
+                _coverError = $"A capa precisa ter pelo menos {MinCoverWidth}x{MinCoverHeight}px.";
+                return;
+            }
+
+            var resized = await file.RequestImageFileAsync("image/jpeg", MaxCoverWidth, MaxCoverHeight);
+            var thumbnail = await file.RequestImageFileAsync("image/jpeg", ThumbnailCoverWidth, ThumbnailCoverHeight);
+
+            Model.CoverImageUrl = await ToDataUrlAsync(resized, MaxProcessedCoverBytes);
+            Model.CoverThumbnailUrl = await ToDataUrlAsync(thumbnail, MaxProcessedCoverBytes);
+        }
+        catch (Exception exception)
+        {
+            _coverError = $"Nao foi possivel processar a imagem. {exception.Message}";
+        }
+    }
+
+    private static async Task<string> ToDataUrlAsync(IBrowserFile file, long maxBytes)
+    {
+        await using var stream = file.OpenReadStream(maxBytes);
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        return $"data:image/jpeg;base64,{Convert.ToBase64String(memory.ToArray())}";
+    }
+
+    private void UseExternalCoverUrl()
+    {
+        _coverError = string.Empty;
+        Model.CoverImageUrl = ArchiveMetadata.DefaultCoverPath;
+        Model.CoverThumbnailUrl = ArchiveMetadata.DefaultCoverPath;
+    }
+
+    private void RemoveCoverImage()
+    {
+        _coverError = string.Empty;
+        Model.CoverImageUrl = ArchiveMetadata.DefaultCoverPath;
+        Model.CoverThumbnailUrl = ArchiveMetadata.DefaultCoverPath;
     }
 
     private void ApplyEpisodeCount()
@@ -384,6 +484,12 @@ else
             Model.Episodes[index].SortOrder = index;
             Model.Episodes[index].Title = ArchiveMetadata.GetUnitTitle(Model.Category, index + 1);
         }
+    }
+
+    private sealed class CoverImageDimensions
+    {
+        public int Width { get; set; }
+        public int Height { get; set; }
     }
 
     private async Task SaveAsync()

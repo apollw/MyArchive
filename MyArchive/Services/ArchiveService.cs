@@ -135,6 +135,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             Category = category,
             Status = ArchiveMetadata.GetStatuses(category).First(),
             CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
+            CoverThumbnailUrl = ArchiveMetadata.DefaultCoverPath,
             CreatedAt = DateTime.Now
         };
     }
@@ -160,7 +161,8 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         {
             Id = item.Id,
             Title = item.Title,
-            CoverImageUrl = string.IsNullOrWhiteSpace(item.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : item.CoverImageUrl,
+            CoverImageUrl = NormalizeCoverUrl(item.CoverImageUrl),
+            CoverThumbnailUrl = NormalizeThumbnailUrl(item.CoverThumbnailUrl, item.CoverImageUrl),
             Category = category,
             Status = status,
             Rating = item.Rating,
@@ -200,9 +202,8 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         entity.Title = model.Title.Trim();
         entity.Type = category;
         entity.CatalogStatus = status;
-        entity.CoverImageUrl = string.IsNullOrWhiteSpace(model.CoverImageUrl)
-            ? ArchiveMetadata.DefaultCoverPath
-            : model.CoverImageUrl.Trim();
+        entity.CoverImageUrl = NormalizeCoverUrl(model.CoverImageUrl);
+        entity.CoverThumbnailUrl = NormalizeThumbnailUrl(model.CoverThumbnailUrl, entity.CoverImageUrl);
         entity.Rating = model.Rating.HasValue ? Math.Round(Math.Clamp(model.Rating.Value, 0, 10), 2) : null;
         entity.Description = model.Review.Trim();
         entity.Review = NullIfWhiteSpace(model.Review);
@@ -276,7 +277,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         var items = await LoadExportRecordsAsync(db);
 
         var builder = new StringBuilder();
-        builder.AppendLine("Id,Title,Category,Status,CoverImageUrl,Rating,Review,Notes,Tags,GameMedia,GamePlatform,FinishedOnAnotherPlatform,CreatedAt,CompletedAt,Checklist");
+        builder.AppendLine("Id,Title,Category,Status,CoverImageUrl,CoverThumbnailUrl,Rating,Review,Notes,Tags,GameMedia,GamePlatform,FinishedOnAnotherPlatform,CreatedAt,CompletedAt,Checklist");
 
         foreach (var item in items.OrderBy(current => current.Category).ThenBy(current => current.Title))
         {
@@ -286,6 +287,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
                 EscapeCsv(item.Category),
                 EscapeCsv(item.Status),
                 EscapeCsv(item.CoverImageUrl),
+                EscapeCsv(item.CoverThumbnailUrl),
                 EscapeCsv(item.Rating?.ToString("0.##", CultureInfo.InvariantCulture) ?? string.Empty),
                 EscapeCsv(ToSingleLine(item.Review ?? string.Empty)),
                 EscapeCsv(ToSingleLine(item.Notes ?? string.Empty)),
@@ -446,6 +448,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
                 string.IsNullOrWhiteSpace(category) ? GetValue(row, index, "Type") : category,
                 GetValue(row, index, "Status"),
                 GetValue(row, index, "CoverImageUrl"),
+                GetValue(row, index, "CoverThumbnailUrl"),
                 ParseNullableDouble(GetValue(row, index, "Rating")),
                 GetValue(row, index, "Review"),
                 GetValue(row, index, "Notes"),
@@ -493,7 +496,8 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             entity.Title = record.Title.Trim();
             entity.Type = category;
             entity.CatalogStatus = status;
-            entity.CoverImageUrl = string.IsNullOrWhiteSpace(record.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : record.CoverImageUrl.Trim();
+            entity.CoverImageUrl = NormalizeCoverUrl(record.CoverImageUrl);
+            entity.CoverThumbnailUrl = NormalizeThumbnailUrl(record.CoverThumbnailUrl, entity.CoverImageUrl);
             entity.Rating = record.Rating.HasValue ? Math.Round(Math.Clamp(record.Rating.Value, 0, 10), 2) : null;
             entity.Description = record.Review?.Trim() ?? string.Empty;
             entity.Review = NullIfWhiteSpace(record.Review);
@@ -542,7 +546,8 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
             item.Title,
             category,
             status,
-            string.IsNullOrWhiteSpace(item.CoverImageUrl) ? ArchiveMetadata.DefaultCoverPath : item.CoverImageUrl,
+            NormalizeCoverUrl(item.CoverImageUrl),
+            NormalizeThumbnailUrl(item.CoverThumbnailUrl, item.CoverImageUrl),
             item.Rating,
             item.CreatedAt.ToLocalTime(),
             item.CompletedAt?.ToLocalTime(),
@@ -590,22 +595,51 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         }
     }
 
+    private static string NormalizeCoverUrl(string? value, string? fallback = null)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            return value.Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(fallback) ? ArchiveMetadata.DefaultCoverPath : fallback.Trim();
+    }
+
+    private static string NormalizeThumbnailUrl(string? value, string coverUrl)
+    {
+        var normalizedCover = NormalizeCoverUrl(coverUrl);
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return normalizedCover;
+        }
+
+        var thumbnail = value.Trim();
+        return string.Equals(thumbnail, ArchiveMetadata.DefaultCoverPath, StringComparison.OrdinalIgnoreCase)
+               && !string.Equals(normalizedCover, ArchiveMetadata.DefaultCoverPath, StringComparison.OrdinalIgnoreCase)
+            ? normalizedCover
+            : thumbnail;
+    }
+
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task<List<ArchiveItemRecord>> LoadExportRecordsAsync(MyArchiveDbContext db)
     {
-        return await db.Items
+        var items = await db.Items
             .AsNoTracking()
             .Include(item => item.Tags)
             .Include(item => item.ChecklistEntries)
             .OrderBy(item => item.Type)
             .ThenBy(item => item.Title)
-            .Select(item => new ArchiveItemRecord(
+            .ToListAsync();
+
+        return items.Select(item => new ArchiveItemRecord(
                 item.Id,
                 item.Title,
                 item.Type,
                 item.CatalogStatus,
-                item.CoverImageUrl,
+                NormalizeCoverUrl(item.CoverImageUrl),
+                NormalizeThumbnailUrl(item.CoverThumbnailUrl, item.CoverImageUrl),
                 item.Rating,
                 item.Review,
                 item.Notes,
@@ -616,7 +650,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
                 item.CreatedAt,
                 item.CompletedAt,
                 item.ChecklistEntries.OrderBy(entry => entry.SortOrder).Select(entry => new ChecklistRecord(entry.Title, entry.IsCompleted)).ToList()))
-            .ToListAsync();
+            .ToList();
     }
 
     private static string EscapeCsv(string value)
@@ -726,6 +760,7 @@ public sealed class ArchiveService(IDbContextFactory<MyArchiveDbContext> dbConte
         string Category,
         string Status,
         string CoverImageUrl,
+        string CoverThumbnailUrl,
         double? Rating,
         string? Review,
         string? Notes,

@@ -29,6 +29,7 @@ public sealed record ArchiveListItemSummary(
     string Category,
     string Status,
     string CoverImageUrl,
+    string CoverThumbnailUrl,
     double? Rating,
     DateTime CreatedAt,
     DateTime? CompletedAt,
@@ -74,8 +75,9 @@ public sealed class ItemEditorModel
     public string Title { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Capa e obrigatoria.")]
-    [StringLength(500)]
     public string CoverImageUrl { get; set; } = ArchiveMetadata.DefaultCoverPath;
+
+    public string CoverThumbnailUrl { get; set; } = ArchiveMetadata.DefaultCoverPath;
 
     [Required(ErrorMessage = "Categoria e obrigatoria.")]
     [StringLength(80)]

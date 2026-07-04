@@ -59,7 +59,8 @@ public static class ArchiveDbInitializer
                 "Status" integer NOT NULL DEFAULT 1,
                 "Priority" integer NOT NULL DEFAULT 2,
                 "CatalogStatus" character varying(80) NOT NULL DEFAULT '',
-                "CoverImageUrl" character varying(500) NOT NULL DEFAULT '',
+                "CoverImageUrl" text NOT NULL DEFAULT '',
+                "CoverThumbnailUrl" text NULL,
                 "Rating" double precision NULL,
                 "Review" character varying(20000) NULL,
                 "GameMedia" character varying(40) NULL,
@@ -106,7 +107,9 @@ public static class ArchiveDbInitializer
     {
         await db.Database.ExecuteSqlRawAsync("""
             ALTER TABLE "Items" ADD COLUMN IF NOT EXISTS "CatalogStatus" character varying(80) NOT NULL DEFAULT '';
-            ALTER TABLE "Items" ADD COLUMN IF NOT EXISTS "CoverImageUrl" character varying(500) NOT NULL DEFAULT '';
+            ALTER TABLE "Items" ADD COLUMN IF NOT EXISTS "CoverImageUrl" text NOT NULL DEFAULT '';
+            ALTER TABLE "Items" ALTER COLUMN "CoverImageUrl" TYPE text;
+            ALTER TABLE "Items" ADD COLUMN IF NOT EXISTS "CoverThumbnailUrl" text NULL;
             ALTER TABLE "Items" ADD COLUMN IF NOT EXISTS "Rating" double precision NULL;
             ALTER TABLE "Items" ADD COLUMN IF NOT EXISTS "Review" character varying(20000) NULL;
             ALTER TABLE "Items" ADD COLUMN IF NOT EXISTS "GameMedia" character varying(40) NULL;
@@ -138,6 +141,11 @@ public static class ArchiveDbInitializer
             if (string.IsNullOrWhiteSpace(item.CoverImageUrl))
             {
                 item.CoverImageUrl = ArchiveMetadata.DefaultCoverPath;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.CoverThumbnailUrl))
+            {
+                item.CoverThumbnailUrl = item.CoverImageUrl;
             }
 
             if (ArchiveMetadata.IsCompleted(item.Type, item.CatalogStatus) && !item.CompletedAt.HasValue)
