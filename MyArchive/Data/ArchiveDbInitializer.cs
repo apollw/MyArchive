@@ -1,4 +1,4 @@
-﻿using System.Net.Sockets;
+using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using MyArchive.Models;
 using MyArchive.Shared;
@@ -24,13 +24,6 @@ public static class ArchiveDbInitializer
             await EnsureExtendedSchemaAsync(db);
             await BackfillCatalogFieldsAsync(db);
 
-            if (await db.Items.AnyAsync())
-            {
-                await db.SaveChangesAsync();
-                return;
-            }
-
-            db.Items.AddRange(CreateSeedItems());
             await db.SaveChangesAsync();
         }
         catch (Exception exception) when (IsConnectionFailure(exception))
@@ -163,70 +156,4 @@ public static class ArchiveDbInitializer
             _ => ArchiveMetadata.GetStatuses(category).First()
         };
 
-    private static IEnumerable<ArchiveItem> CreateSeedItems()
-    {
-        return
-        [
-            new ArchiveItem
-            {
-                Title = "O Nome do Vento",
-                Type = "Livros",
-                CatalogStatus = "Lendo",
-                CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
-                Rating = 9.2,
-                Review = "Fantasia com foco forte em atmosfera, narrativa oral e construcao do protagonista.",
-                Notes = "Retomar a leitura do arco em Imre.",
-                CreatedAt = DateTime.UtcNow.AddDays(-18),
-                UpdatedAt = DateTime.UtcNow.AddDays(-1)
-            },
-            new ArchiveItem
-            {
-                Title = "Berserk Deluxe Vol. 1",
-                Type = "Mangas",
-                CatalogStatus = "Nao lido",
-                CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
-                Notes = "Prioridade alta para abrir a colecao fisica.",
-                CreatedAt = DateTime.UtcNow.AddDays(-10),
-                UpdatedAt = DateTime.UtcNow.AddDays(-2)
-            },
-            new ArchiveItem
-            {
-                Title = "The Witcher 3",
-                Type = "Games",
-                CatalogStatus = "Jogando",
-                CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
-                Rating = 9.7,
-                Review = "Segue como um dos melhores RPGs de mundo aberto do acervo.",
-                Notes = "Finalizar Hearts of Stone antes de Blood and Wine.",
-                GameMedia = "Digital",
-                GamePlatform = "PC",
-                FinishedOnAnotherPlatform = true,
-                CreatedAt = DateTime.UtcNow.AddDays(-28),
-                UpdatedAt = DateTime.UtcNow.AddHours(-12)
-            },
-            new ArchiveItem
-            {
-                Title = "Duna: Parte Dois",
-                Type = "Filmes",
-                CatalogStatus = "Assistido",
-                CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
-                Rating = 8.8,
-                Review = "Escala visual absurda e direcao muito segura.",
-                CompletedAt = DateTime.UtcNow.AddDays(-2),
-                CreatedAt = DateTime.UtcNow.AddDays(-4),
-                UpdatedAt = DateTime.UtcNow.AddDays(-2)
-            },
-            new ArchiveItem
-            {
-                Title = "Frieren",
-                Type = "Animes",
-                CatalogStatus = "Vendo",
-                CoverImageUrl = ArchiveMetadata.DefaultCoverPath,
-                Rating = 9.1,
-                Notes = "Registrar impressoes por arco quando o suporte a episodios entrar.",
-                CreatedAt = DateTime.UtcNow.AddDays(-7),
-                UpdatedAt = DateTime.UtcNow.AddDays(-1)
-            }
-        ];
-    }
 }
